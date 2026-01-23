@@ -2,30 +2,36 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 const VISTORIADOR_SYSTEM_INSTRUCTION = `
-Você é David Oliveira (Creci 84926-F), um Vistoriador Profissional de Imóveis. 
-Sua tarefa é REDIGIR descrições técnicas EXTREMAMENTE OBJETIVAS E RESUMIDAS.
+Você é David Oliveira (Creci 84926-F), um Vistoriador Profissional de Imóveis especialista em laudos periciais.
+Sua tarefa é REDIGIR descrições técnicas PRECISAS, DETALHADAS e OBJETIVAS para laudos de vistoria imobiliária.
 
 REGRAS DE OURO:
-- Seja direto. Evite textos longos e floreios.
-- Use bullet points para listar itens identificados.
-- Foque unicamente no ESTADO DE CONSERVAÇÃO (novo, íntegro, avariado, marcas de uso).
-- Não presuma causas. Apenas relate o que é visível.
-- Ao analisar fotos/vídeos, identifique os itens e dê um veredito rápido sobre o estado.
-- Linguagem formal, porém enxuta.
+- Use linguagem formal e técnica (ex: "piso em porcelanato acetinado", "pintura látex fosca", "esquadrias em alumínio anodizado").
+- Foque estritamente no ESTADO DE CONSERVAÇÃO (novo, íntegro, avariado, com marcas de uso, com sujidade, etc).
+- Não presuma causas de danos. Relate apenas o que é visualmente observável.
+- Ao analisar fotos/vídeos, faça um inventário detalhado de todos os itens (portas, janelas, tomadas, interruptores, luminárias, móveis fixos).
+- Diferencie o tom conforme o tipo de laudo:
+  - ENTRADA: Registro minucioso do estado inicial para garantia das partes.
+  - SAÍDA: Foco na comparação e desgaste/danos durante a locação.
+  - CONSTATAÇÃO: Relato fiel da situação em um momento específico.
+- Organize os itens em listas para facilitar a leitura técnica.
 `;
 
-export const analyzeRoomMediaAI = async (roomType: string, mediaItems: { data: string, mimeType: string }[]): Promise<any> => {
+export const analyzeRoomMediaAI = async (roomType: string, inspectionType: string, mediaItems: { data: string, mimeType: string }[]): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const hasVideo = mediaItems.some(item => item.mimeType.startsWith('video/'));
   const modelName = hasVideo ? 'gemini-3-flash-preview' : 'gemini-3-pro-preview';
 
   const parts = [
-    { text: `Analise este ambiente (${roomType}). 
-    Gere um resumo executivo MUITO CURTO e liste os itens e seus estados.
-    Foque apenas no estado de conservação.
+    { text: `Analise as mídias deste ambiente (${roomType}) para um Laudo de ${inspectionType}.
     
-    Retorne em JSON estruturado.` },
+    TAREFAS:
+    1. Gere uma descrição técnica detalhada do ambiente (pisos, paredes, tetos).
+    2. Liste todos os itens identificados e descreva o estado de conservação de cada um de forma precisa.
+    3. Identifique evidências de danos ou falta de manutenção.
+    
+    Retorne os dados em formato JSON estruturado.` },
     ...mediaItems.map(item => ({
       inlineData: {
         data: item.data.split(',')[1] || item.data,
@@ -41,11 +47,11 @@ export const analyzeRoomMediaAI = async (roomType: string, mediaItems: { data: s
       config: {
         systemInstruction: VISTORIADOR_SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
-        thinkingConfig: modelName === 'gemini-3-pro-preview' ? { thinkingBudget: 32768 } : undefined,
+        thinkingConfig: modelName === 'gemini-3-pro-preview' ? { thinkingBudget: 24576 } : undefined,
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            descricaoGeral: { type: Type.STRING, description: "Resumo objetivo e curto do ambiente." },
+            descricaoGeral: { type: Type.STRING, description: "Descrição detalhada e técnica do ambiente." },
             estadoConservacao: { type: Type.STRING, enum: ["Ótimo", "Bom", "Regular", "Ruim"] },
             itensIdentificados: {
               type: Type.ARRAY,
@@ -79,7 +85,7 @@ export const analyzeRoomMediaAI = async (roomType: string, mediaItems: { data: s
     const text = response.text;
     return text ? JSON.parse(text) : null;
   } catch (error) {
-    console.error("Erro na análise Gemini:", error);
+    console.error("Erro na análise técnica IA:", error);
     throw error;
   }
 };
@@ -87,10 +93,12 @@ export const analyzeRoomMediaAI = async (roomType: string, mediaItems: { data: s
 export const performComparisonAI = async (entryPdf: string, exitPdf: string, manualObs?: string): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `
-    Compare os dois laudos de vistoria (Entrada e Saída) em anexo.
-    Aponte APENAS divergências de danos ou desgaste excessivo.
-    ${manualObs ? `Considere também estas observações do vistoriador: "${manualObs}"` : ''}
-    Use o Google Search para verificar preços médios de reparo/substituição para as divergências encontradas.
+    AJA COMO PERITO: Compare os laudos de ENTRADA e SAÍDA anexados.
+    IDENTIFIQUE DIVERGÊNCIAS de estado e danos.
+    ${manualObs ? `CONSIDERE ESTAS OBSERVAÇÕES ADICIONAIS DO VISTORIADOR: "${manualObs}"` : ''}
+    
+    Use o Google Search para encontrar custos estimados de reparo ou troca no mercado atual para os danos encontrados.
+    Gere um laudo pericial de divergências detalhado.
   `;
 
   try {
@@ -110,10 +118,10 @@ export const performComparisonAI = async (entryPdf: string, exitPdf: string, man
       }
     });
 
-    const analysis = response.text || "Falha ao gerar análise pericial.";
+    const analysis = response.text || "Falha na análise comparativa.";
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
       ?.map((chunk: any) => ({
-        title: chunk.web?.title || "Fonte de Preço",
+        title: chunk.web?.title || "Referência Técnica",
         uri: chunk.web?.uri
       })).filter((s: any) => s.uri) || [];
 
@@ -130,28 +138,11 @@ export const transcribeAudio = async (base64Audio: string, mimeType: string = 'a
     model: 'gemini-flash-lite-latest',
     contents: {
       parts: [
-        { text: "Transcreva este áudio para um laudo técnico de vistoria, seja muito objetivo." },
+        { text: "Transcreva este áudio de vistoria para um texto técnico formal e direto." },
         { inlineData: { data: base64Audio, mimeType: mimeType } }
       ]
     },
     config: { systemInstruction: VISTORIADOR_SYSTEM_INSTRUCTION }
-  });
-  return response.text || "";
-};
-
-export const getPropertyContext = async (address: string, lat?: number, lng?: number): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const response = await ai.models.generateContent({
-    model: 'gemini-flash-latest',
-    contents: `Localização: ${address}. Informe infraestrutura relevante próxima.`,
-    config: {
-      tools: [{ googleMaps: {} }],
-      toolConfig: {
-        retrievalConfig: {
-          latLng: lat && lng ? { latitude: lat, longitude: lng } : undefined
-        }
-      }
-    }
   });
   return response.text || "";
 };

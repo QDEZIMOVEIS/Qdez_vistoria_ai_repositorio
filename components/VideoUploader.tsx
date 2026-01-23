@@ -78,11 +78,17 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideosAdded }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
               </svg>
             </div>
-            <p className="text-[10px] text-red-600 font-black uppercase tracking-widest">Vídeo Análise</p>
-            <p className="text-[8px] text-slate-400 mt-1 font-bold uppercase">(IA detecta danos e timestamps)</p>
+            <p className="text-[10px] text-red-600 font-black uppercase tracking-widest">Vídeos do Ambiente</p>
+            <p className="text-[8px] text-slate-400 mt-1 font-bold uppercase">(Galeria: mp4, webm, mov)</p>
           </div>
         )}
-        <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
+        <input 
+          type="file" 
+          multiple 
+          accept="video/mp4,video/webm,video/quicktime,video/*" 
+          className="hidden" 
+          onChange={handleFileChange} 
+        />
       </label>
     </div>
   );
