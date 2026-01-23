@@ -2,34 +2,38 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppSettings } from "../types";
 
-const getSystemInstruction = (settings: AppSettings) => {
-  let detailInstruction = "";
-  if (settings.detailLevel === 'Conciso') {
-    detailInstruction = "Seja extremamente breve e direto. Foque apenas no estado geral e danos críticos.";
-  } else if (settings.detailLevel === 'Muito Detalhado') {
-    detailInstruction = "Seja exaustivo. Descreva materiais, texturas, marcas aparentes de desgaste e faça um inventário minucioso de cada centímetro do ambiente.";
-  }
+const getSystemInstruction = (settings: AppSettings, context: 'analysis' | 'comparison' = 'analysis') => {
+  const detailInstruction = {
+    'Conciso': "Seja extremamente breve e direto. Foque apenas no estado geral e danos críticos.",
+    'Normal': "Descreva o estado de conservação de forma equilibrada e técnica.",
+    'Muito Detalhado': "Seja exaustivo. Descreva materiais, texturas, marcas de uso e faça um inventário minucioso."
+  }[settings.detailLevel];
 
   const severityInstruction = `Em caso de dúvidas sobre danos, classifique a gravidade como '${settings.defaultSeverity}' por padrão.`;
   const toneInstruction = `Use um tom predominantemente ${settings.tone}.`;
 
-  return `
-Você é David Oliveira (Creci 84926-F), um Vistoriador Profissional de Imóveis especialista em laudos periciais.
-Sua tarefa é REDIGIR descrições técnicas PRECISAS para laudos de vistoria imobiliária.
+  if (context === 'comparison') {
+    return `Você é David Oliveira (Creci 84926-F), um Perito Vistoriador Imobiliário.
+Sua tarefa é COMPARAR dois laudos (Entrada e Saída) e identificar DIVERGÊNCIAS.
+- Foque em danos novos, itens faltantes ou mudanças no estado de conservação.
+- Use o Google Search para encontrar preços reais de reparo no mercado brasileiro (estimados).
+- Seja imparcial e estritamente técnico.
+- ${detailInstruction}
+- ${toneInstruction}`;
+  }
 
-ESTILO ESPECÍFICO:
+  return `Você é David Oliveira (Creci 84926-F), um Vistoriador Profissional de Imóveis.
+Sua tarefa é REDIGIR descrições técnicas PRECISAS para vistorias.
+- Use linguagem técnica (ex: "pintura látex fosca", "esquadrias de alumínio").
+- Relate apenas o que é visualmente observável.
 - ${detailInstruction}
 - ${severityInstruction}
-- ${toneInstruction}
-
-REGRAS GERAIS:
-- Use linguagem profissional (ex: "piso em porcelanato acetinado", "pintura látex fosca").
-- Foque estritamente no ESTADO DE CONSERVAÇÃO (novo, íntegro, avariado, com marcas de uso).
-- Não presuma causas de danos. Relate apenas o que é visualmente observável.
-- Organize os itens em listas para facilitar a leitura técnica.
-`;
+- ${toneInstruction}`;
 };
 
+/**
+ * Analisa mídias de um ambiente para gerar descrição técnica.
+ */
 export const analyzeRoomMediaAI = async (
   roomType: string, 
   inspectionType: string, 
@@ -38,22 +42,22 @@ export const analyzeRoomMediaAI = async (
 ): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  // Usando modelos da série 3 conforme as diretrizes para tarefas complexas/visuais
-  const hasVideo = mediaItems.some(item => item.mimeType.startsWith('video/'));
-  const modelName = hasVideo ? 'gemini-3-flash-preview' : 'gemini-3-pro-preview';
+  // Modelos conforme diretrizes: Flash para velocidade/multimodal, Pro para complexidade
+  const modelName = 'gemini-3-flash-preview';
 
   const parts = [
     { text: `Analise as mídias deste ambiente (${roomType}) para um Laudo de ${inspectionType}.
     
     TAREFAS:
-    1. Gere uma descrição técnica detalhada do ambiente seguindo as instruções de sistema.
-    2. Liste todos os itens identificados e descreva o estado de conservação.
-    3. Identifique evidências de danos ou falta de manutenção.
+    1. Gere uma descrição técnica detalhada seguindo as instruções de sistema.
+    2. Liste itens e estados de conservação.
+    3. Identifique evidências de danos.
     
-    RETORNE OBRIGATORIAMENTE EM JSON conforme o schema.` },
+    RETORNE EM JSON.` },
     ...mediaItems.map(item => ({
       inlineData: {
-        data: item.data.split(',')[1] || item.data,
+        // Garante que enviamos apenas a parte base64
+        data: item.data.includes('base64,') ? item.data.split('base64,')[1] : item.data,
         mimeType: item.mimeType
       }
     }))
@@ -64,13 +68,12 @@ export const analyzeRoomMediaAI = async (
       model: modelName,
       contents: { parts },
       config: {
-        systemInstruction: getSystemInstruction(settings),
+        systemInstruction: getSystemInstruction(settings, 'analysis'),
         responseMimeType: "application/json",
-        // Desativando thinkingConfig para esta tarefa para garantir que todos os tokens sejam usados na resposta JSON técnica
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            descricaoGeral: { type: Type.STRING, description: "Descrição detalhada e técnica do ambiente." },
+            descricaoGeral: { type: Type.STRING },
             estadoConservacao: { type: Type.STRING, enum: ["Ótimo", "Bom", "Regular", "Ruim"] },
             itensIdentificados: {
               type: Type.ARRAY,
@@ -102,17 +105,18 @@ export const analyzeRoomMediaAI = async (
     });
 
     const text = response.text;
-    if (!text) return null;
+    if (!text) throw new Error("Resposta da IA vazia");
     
-    // Limpeza básica para garantir JSON válido caso o modelo retorne markdown
-    const cleanedJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleanedJson);
+    return JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
   } catch (error) {
-    console.error("Erro na análise técnica IA:", error);
+    console.error("Erro detalhado na análise IA:", error);
     throw error;
   }
 };
 
+/**
+ * Realiza comparação pericial entre dois PDFs.
+ */
 export const performComparisonAI = async (
   entryPdf: string, 
   exitPdf: string, 
@@ -120,14 +124,19 @@ export const performComparisonAI = async (
   manualObs?: string
 ): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `
-    AJA COMO PERITO: Compare os laudos de ENTRADA e SAÍDA anexados.
-    IDENTIFIQUE DIVERGÊNCIAS de estado e danos.
-    ${manualObs ? `CONSIDERE ESTAS OBSERVAÇÕES ADICIONAIS DO VISTORIADOR: "${manualObs}"` : ''}
-    
-    Use o Google Search para encontrar custos estimados de reparo no mercado brasileiro atual.
-    Gere um laudo pericial de divergências detalhado seguindo o estilo: Nível de Detalhe ${settings.detailLevel}, Tom ${settings.tone}.
-  `;
+  
+  // Prompt refinado para comparação documental
+  const prompt = `AJA COMO PERITO: Compare o Laudo de ENTRADA (PDF 1) com o Laudo de SAÍDA (PDF 2).
+  
+DETERMINE AS DIVERGÊNCIAS:
+1. Itens presentes na entrada que faltam na saída.
+2. Danos novos (trincas, manchas, quebras) que não existiam no laudo de entrada.
+3. Mudanças significativas no estado de conservação.
+
+${manualObs ? `OBSERVAÇÕES DO VISTORIADOR PARA FOCO: "${manualObs}"` : ''}
+
+IMPORTANTE: Use o Google Search para estimar custos de reparo/substituição para as divergências encontradas.
+Apresente o resultado em Markdown profissional.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -140,36 +149,46 @@ export const performComparisonAI = async (
         ]
       },
       config: {
-        systemInstruction: getSystemInstruction(settings),
+        systemInstruction: getSystemInstruction(settings, 'comparison'),
         tools: [{ googleSearch: {} }]
       }
     });
 
-    const analysis = response.text || "Falha na análise comparativa.";
+    const analysis = response.text || "Falha ao gerar texto da análise.";
+    
+    // Extração de fontes do Google Search
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
       ?.map((chunk: any) => ({
-        title: chunk.web?.title || "Referência Técnica",
+        title: chunk.web?.title || "Referência de Preço",
         uri: chunk.web?.uri
       })).filter((s: any) => s.uri) || [];
 
     return { analysis, sources };
   } catch (error) {
-    console.error("Erro na comparação pericial:", error);
+    console.error("Erro detalhado na comparação pericial:", error);
     throw error;
   }
 };
 
+/**
+ * Transcreve áudio para texto técnico.
+ */
 export const transcribeAudio = async (base64Audio: string, settings: AppSettings, mimeType: string = 'audio/webm'): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const response = await ai.models.generateContent({
-    model: 'gemini-flash-lite-latest',
-    contents: {
-      parts: [
-        { text: `Transcreva este áudio de vistoria para um texto técnico formal. Siga o tom: ${settings.tone}.` },
-        { inlineData: { data: base64Audio, mimeType: mimeType } }
-      ]
-    },
-    config: { systemInstruction: getSystemInstruction(settings) }
-  });
-  return response.text || "";
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: {
+        parts: [
+          { text: `Transcreva este áudio de vistoria. Tom: ${settings.tone}. Converta gírias para termos técnicos imobiliários.` },
+          { inlineData: { data: base64Audio, mimeType: mimeType } }
+        ]
+      },
+      config: { systemInstruction: getSystemInstruction(settings, 'analysis') }
+    });
+    return response.text || "";
+  } catch (error) {
+    console.error("Erro na transcrição:", error);
+    return "";
+  }
 };

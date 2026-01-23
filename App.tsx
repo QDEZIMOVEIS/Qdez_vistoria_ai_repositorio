@@ -135,9 +135,9 @@ const App: React.FC = () => {
           }
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro na análise IA:", error);
-      alert("Não foi possível completar a análise IA deste ambiente no momento. Verifique sua conexão ou tente novamente.");
+      alert(`Não foi possível completar a análise IA: ${error.message || 'Tente novamente.'}`);
     } finally {
       setProcessingRoomId(null);
     }
@@ -218,8 +218,9 @@ const App: React.FC = () => {
       setCurrent(updatedCurrent);
       saveToGlobalList(updatedCurrent);
       setView('report');
-    } catch(e) { 
-      alert("Erro na comparação pericial. Verifique se os PDFs são válidos e tente novamente."); 
+    } catch(e: any) { 
+      console.error("Erro Comparação PDF:", e);
+      alert(`Erro na perícia comparativa: ${e.message || 'Verifique seus documentos e tente novamente.'}`); 
     } finally { 
       setIsBusy(false); 
     }
@@ -230,7 +231,9 @@ const App: React.FC = () => {
     if (file && file.type === 'application/pdf') {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const base64 = (ev.target?.result as string).split(',')[1];
+        const result = ev.target?.result as string;
+        // Limpa o prefixo data:application/pdf;base64, antes de salvar no estado
+        const base64 = result.includes(',') ? result.split(',')[1] : result;
         setter(base64);
       };
       reader.readAsDataURL(file);
@@ -423,9 +426,29 @@ const App: React.FC = () => {
                    />
                  </div>
 
-                 {/* Dados do Relatório */}
-                 <div className="grid grid-cols-1 gap-4 mt-6">
-                    <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black border-none uppercase" placeholder="Endereço do Imóvel" value={current.address} onChange={(e) => updateCurrent({ address: e.target.value })} />
+                 {/* Dados do Relatório Pericial */}
+                 <div className="space-y-4 mt-6">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1 tracking-widest">Identificação do Imóvel e Partes</label>
+                    <input 
+                      className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black border border-slate-200 uppercase focus:ring-2 focus:ring-red-50 outline-none" 
+                      placeholder="Endereço Completo do Imóvel" 
+                      value={current.address} 
+                      onChange={(e) => updateCurrent({ address: e.target.value })} 
+                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input 
+                        className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black border border-slate-200 uppercase focus:ring-2 focus:ring-red-50 outline-none" 
+                        placeholder="Locador / Cliente" 
+                        value={current.clientName} 
+                        onChange={(e) => updateCurrent({ clientName: e.target.value })} 
+                      />
+                      <input 
+                        className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black border border-slate-200 uppercase focus:ring-2 focus:ring-red-50 outline-none" 
+                        placeholder="Locatário / Proponente" 
+                        value={current.tenantName} 
+                        onChange={(e) => updateCurrent({ tenantName: e.target.value })} 
+                      />
+                    </div>
                  </div>
                </div>
 
