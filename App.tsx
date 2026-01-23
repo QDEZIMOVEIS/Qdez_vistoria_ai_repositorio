@@ -50,11 +50,15 @@ const App: React.FC = () => {
     }
   }, [inspections, settings, isLoaded]);
 
-  // Resumo de estado dos ambientes
+  // Resumo de estado dos ambientes (Ótimo, Bom, Regular, Ruim)
   const roomSummary = useMemo(() => {
     if (!current || current.rooms.length === 0) return null;
     const summary = { 'Ótimo': 0, 'Bom': 0, 'Regular': 0, 'Ruim': 0 };
-    current.rooms.forEach(room => { summary[room.condition]++; });
+    current.rooms.forEach(room => { 
+      if (summary[room.condition] !== undefined) {
+        summary[room.condition]++; 
+      }
+    });
     return summary;
   }, [current?.rooms]);
 
@@ -197,7 +201,7 @@ const App: React.FC = () => {
         comparisonResult: {
           analysis: res.analysis,
           sources: res.sources,
-          budget: "", // Calculado dinamicamente no texto
+          budget: "", 
           manualObservations: manualComparisonObs
         }, 
         status: 'completed' as const,
@@ -432,6 +436,7 @@ const App: React.FC = () => {
 
         {view === 'editor' && current && (
           <div className="space-y-6 pb-40 animate-in fade-in duration-500">
+            {/* Header do Imóvel */}
             <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-1 h-full bg-red-600"></div>
               <div className="flex justify-between items-start mb-6">
@@ -445,45 +450,126 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            {/* Barra de Estado Geral */}
             {roomSummary && (
               <div className="bg-white px-8 py-6 rounded-[2.5rem] border border-slate-200 shadow-sm">
-                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 text-center">Estado Geral da Propriedade</h4>
+                <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 text-center">Resumo da Propriedade</h4>
                 <div className="flex h-2.5 rounded-full overflow-hidden mb-6 shadow-inner bg-slate-100 max-w-sm mx-auto">
                   {Object.entries(roomSummary).map(([key, count]) => (
                     (count as number) > 0 && <div key={key} className={`${getStatusColor(key as any)} h-full transition-all duration-700`} style={{ width: `${((count as number) / current.rooms.length) * 100}%` }}></div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {Object.entries(roomSummary).map(([key, count]) => (
+                    <div key={key} className="flex flex-col items-center">
+                      <span className={`w-2 h-2 rounded-full mb-1 ${getStatusColor(key as any)}`}></span>
+                      <span className="text-[8px] font-black uppercase text-slate-800">{(count as number)} {key}</span>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
 
             <div className="space-y-4">
+              {/* Botão Seletor de Novo Ambiente */}
               <div className="flex justify-between items-center px-4">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Checklist por Ambientes</h3>
-                <select className="bg-slate-900 text-white text-[10px] font-black px-5 py-2.5 rounded-2xl shadow-xl border-none ring-0 appearance-none text-center hover:scale-105 transition-transform" onChange={(e) => e.target.value && addRoom(e.target.value)} value="">
-                  <option value="" disabled>+ NOVO AMBIENTE</option>
-                  {COMMON_ROOMS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
+                <div className="relative">
+                  <select 
+                    className="bg-slate-900 text-white text-[10px] font-black pl-5 pr-10 py-3 rounded-2xl shadow-xl border-none ring-0 appearance-none text-center hover:scale-105 transition-all cursor-pointer" 
+                    onChange={(e) => e.target.value && addRoom(e.target.value)} 
+                    value=""
+                  >
+                    <option value="" disabled>+ NOVO AMBIENTE</option>
+                    {COMMON_ROOMS.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-white">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>
+                  </div>
+                </div>
               </div>
 
+              {/* Lista de Ambientes no Editor */}
               {current.rooms.map(room => (
                 <div key={room.id} className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all group">
                   <div className="p-6 flex justify-between items-center cursor-pointer" onClick={() => setEditingRoom(editingRoom === room.id ? null : room.id)}>
                     <div className="flex items-center gap-5">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black shadow-lg transform transition-transform group-hover:scale-105 ${getStatusColor(room.condition)}`}>{room.condition.charAt(0)}</div>
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black shadow-lg transform transition-transform group-hover:scale-105 ${getStatusColor(room.condition)}`}>
+                        {room.condition.charAt(0)}
+                      </div>
                       <div>
-                        <div className="flex items-center gap-2"><h4 className="font-black text-slate-800 uppercase text-xs tracking-tight">{room.customName || room.type}</h4><span className={`w-1.5 h-1.5 rounded-full ${getStatusColor(room.condition)}`}></span></div>
-                        <div className="flex gap-3 mt-1.5"><span className="text-[8px] font-black px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase">{room.photos.length} Fotos</span></div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-black text-slate-800 uppercase text-xs tracking-tight">{room.customName || room.type}</h4>
+                          <span className={`w-1.5 h-1.5 rounded-full ${getStatusColor(room.condition)}`}></span>
+                        </div>
+                        <div className="flex gap-3 mt-1.5">
+                          <span className="text-[8px] font-black px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase">{room.photos.length} Fotos</span>
+                          <span className="text-[8px] font-black px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full uppercase">{room.condition}</span>
+                        </div>
                       </div>
                     </div>
-                    {processingRoomId === room.id ? <div className="bg-red-50 px-3 py-1.5 rounded-full animate-pulse"><span className="text-[9px] font-black text-red-600 uppercase">Periciando...</span></div> : <svg className={`w-4 h-4 text-slate-300 transition-transform duration-300 ${editingRoom === room.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>}
+                    {processingRoomId === room.id ? (
+                      <div className="bg-red-50 px-3 py-1.5 rounded-full animate-pulse border border-red-100">
+                        <span className="text-[9px] font-black text-red-600 uppercase tracking-tighter">Periciando...</span>
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-50 transition-colors">
+                        <svg className={`w-4 h-4 text-slate-300 transition-transform duration-300 ${editingRoom === room.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>
+                      </div>
+                    )}
                   </div>
 
                   {editingRoom === room.id && (
                     <div className="p-8 border-t border-slate-50 space-y-8 bg-slate-50/20">
+                      {/* Metadados do Ambiente (NOME E ESTADO) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Nome Personalizado</label>
+                          <input 
+                            className="w-full bg-white p-4 rounded-2xl text-xs font-bold border border-slate-200 shadow-sm focus:ring-2 focus:ring-red-100 outline-none" 
+                            value={room.customName || ''} 
+                            placeholder={room.type}
+                            onChange={(e) => updateRoom(room.id, { customName: e.target.value })} 
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Qualificação do Estado</label>
+                          <div className="flex gap-1.5 p-1 bg-white rounded-2xl border border-slate-200">
+                            {(['Ótimo', 'Bom', 'Regular', 'Ruim'] as const).map(s => (
+                              <button 
+                                key={s} 
+                                onClick={() => updateRoom(room.id, { condition: s })} 
+                                className={`flex-1 text-[8px] font-black py-2.5 rounded-xl uppercase transition-all ${room.condition === s ? getStatusColor(s) + ' text-white shadow-lg scale-105' : 'text-slate-400 hover:text-slate-600'}`}
+                              >
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-6">
                         <PhotoUploader onPhotosAdded={(newPhotos) => updateRoom(room.id, { photos: [...room.photos, ...newPhotos] })} />
                         <VideoUploader onVideosAdded={(newVideos) => updateRoom(room.id, { videos: [...room.videos, ...newVideos] })} />
                       </div>
+
+                      {/* Grade de Fotos */}
+                      {room.photos.length > 0 && (
+                        <div className="grid grid-cols-5 gap-3">
+                          {room.photos.map(photo => (
+                            <div key={photo.id} className="relative group aspect-square rounded-2xl overflow-hidden border-2 border-white shadow-md">
+                               <img src={photo.data} className="w-full h-full object-cover" />
+                               <button 
+                                 onClick={() => updateRoom(room.id, { photos: room.photos.filter(p => p.id !== photo.id) })} 
+                                 className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                               >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
+                               </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="space-y-4">
                         <div className="flex justify-between items-center bg-slate-900 p-2.5 rounded-2xl shadow-xl">
                           <div className="flex gap-3">
@@ -491,7 +577,7 @@ const App: React.FC = () => {
                              <button onClick={() => handleManualRoomAnalysis(room.id)} disabled={processingRoomId === room.id} className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase transition-all shadow-md active:scale-95 disabled:opacity-50 hover:bg-red-700">Análise Técnica IA</button>
                           </div>
                         </div>
-                        <textarea className="w-full bg-white p-6 rounded-[2rem] border border-slate-200 text-xs h-64 leading-relaxed outline-none font-medium text-slate-700" placeholder="A IA David Oliveira gerará uma descrição técnica seguindo suas configurações de detalhamento..." value={room.description} onChange={(e) => updateRoom(room.id, { description: e.target.value })} />
+                        <textarea className="w-full bg-white p-6 rounded-[2rem] border border-slate-200 text-xs h-64 leading-relaxed outline-none font-medium text-slate-700 focus:ring-4 focus:ring-red-50 transition-all" placeholder="A IA David Oliveira gerará uma descrição técnica detalhada com base no seu nível de detalhamento configurado..." value={room.description} onChange={(e) => updateRoom(room.id, { description: e.target.value })} />
                       </div>
                     </div>
                   )}
@@ -499,10 +585,11 @@ const App: React.FC = () => {
               ))}
             </div>
 
+            {/* Ações de Finalização */}
             <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50/95 to-transparent no-print pointer-events-none z-40">
               <div className="max-w-md mx-auto grid grid-cols-2 gap-4 pointer-events-auto">
-                <button onClick={() => setView('list')} className="bg-slate-200 text-slate-700 py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-[0.2em] shadow-lg active:scale-95">Pausar e Salvar</button>
-                <button onClick={() => { updateCurrent({ status: 'completed', date: new Date().toISOString() }); setView('report'); }} className="bg-slate-900 text-white py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-[0.2em] shadow-2xl active:scale-95">Finalizar e Gerar Laudo</button>
+                <button onClick={() => setView('list')} className="bg-slate-200 text-slate-700 py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-[0.2em] shadow-lg active:scale-95 transition-all">Pausar e Salvar</button>
+                <button onClick={() => { updateCurrent({ status: 'completed', date: new Date().toISOString() }); setView('report'); }} className="bg-slate-900 text-white py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-[0.2em] shadow-2xl active:scale-95 transition-all">Finalizar e Gerar Laudo</button>
               </div>
             </div>
           </div>
@@ -519,6 +606,7 @@ const App: React.FC = () => {
         )}
       </main>
 
+      {/* Loading de IA Global */}
       {isBusy && (
         <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-2xl z-[100] flex items-center justify-center p-10 animate-in fade-in duration-500">
           <div className="bg-white p-16 rounded-[4rem] max-w-sm w-full text-center shadow-[0_0_120px_rgba(220,38,38,0.15)] border border-red-50">
