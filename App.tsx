@@ -111,7 +111,14 @@ const App: React.FC = () => {
         ...room.photos.map(p => ({ data: p.data, mimeType: p.mimeType })),
         ...room.videos.map(v => ({ data: v.data, mimeType: v.mimeType }))
       ];
-      const result = await analyzeRoomMediaAI(room.customName || room.type, current.type, mediaToAnalyze.slice(-10), settings);
+      
+      const result = await analyzeRoomMediaAI(
+        room.customName || room.type, 
+        current.type, 
+        mediaToAnalyze.slice(-10), 
+        settings
+      );
+      
       if (result) {
         const itemsText = result.itensIdentificados.map((i: any) => `- ${i.item}: ${i.estado}. ${i.detalhes}`).join('\n');
         const newDesc = `${result.descricaoGeral}\n\nITENS IDENTIFICADOS:\n${itemsText}`;
@@ -129,7 +136,8 @@ const App: React.FC = () => {
         });
       }
     } catch (error) {
-      alert("Não foi possível completar a análise IA deste ambiente. Tente novamente.");
+      console.error("Erro na análise IA:", error);
+      alert("Não foi possível completar a análise IA deste ambiente no momento. Verifique sua conexão ou tente novamente.");
     } finally {
       setProcessingRoomId(null);
     }

@@ -38,6 +38,7 @@ export const analyzeRoomMediaAI = async (
 ): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
+  // Usando modelos da série 3 conforme as diretrizes para tarefas complexas/visuais
   const hasVideo = mediaItems.some(item => item.mimeType.startsWith('video/'));
   const modelName = hasVideo ? 'gemini-3-flash-preview' : 'gemini-3-pro-preview';
 
@@ -45,11 +46,11 @@ export const analyzeRoomMediaAI = async (
     { text: `Analise as mídias deste ambiente (${roomType}) para um Laudo de ${inspectionType}.
     
     TAREFAS:
-    1. Gere uma descrição técnica detalhada do ambiente.
+    1. Gere uma descrição técnica detalhada do ambiente seguindo as instruções de sistema.
     2. Liste todos os itens identificados e descreva o estado de conservação.
     3. Identifique evidências de danos ou falta de manutenção.
     
-    Retorne os dados em formato JSON estruturado.` },
+    RETORNE OBRIGATORIAMENTE EM JSON conforme o schema.` },
     ...mediaItems.map(item => ({
       inlineData: {
         data: item.data.split(',')[1] || item.data,
@@ -65,7 +66,7 @@ export const analyzeRoomMediaAI = async (
       config: {
         systemInstruction: getSystemInstruction(settings),
         responseMimeType: "application/json",
-        thinkingConfig: modelName === 'gemini-3-pro-preview' ? { thinkingBudget: 24576 } : undefined,
+        // Desativando thinkingConfig para esta tarefa para garantir que todos os tokens sejam usados na resposta JSON técnica
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -101,7 +102,11 @@ export const analyzeRoomMediaAI = async (
     });
 
     const text = response.text;
-    return text ? JSON.parse(text) : null;
+    if (!text) return null;
+    
+    // Limpeza básica para garantir JSON válido caso o modelo retorne markdown
+    const cleanedJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(cleanedJson);
   } catch (error) {
     console.error("Erro na análise técnica IA:", error);
     throw error;
@@ -120,7 +125,7 @@ export const performComparisonAI = async (
     IDENTIFIQUE DIVERGÊNCIAS de estado e danos.
     ${manualObs ? `CONSIDERE ESTAS OBSERVAÇÕES ADICIONAIS DO VISTORIADOR: "${manualObs}"` : ''}
     
-    Use o Google Search para encontrar custos estimados de reparo no mercado atual.
+    Use o Google Search para encontrar custos estimados de reparo no mercado brasileiro atual.
     Gere um laudo pericial de divergências detalhado seguindo o estilo: Nível de Detalhe ${settings.detailLevel}, Tom ${settings.tone}.
   `;
 
@@ -136,8 +141,7 @@ export const performComparisonAI = async (
       },
       config: {
         systemInstruction: getSystemInstruction(settings),
-        tools: [{ googleSearch: {} }],
-        thinkingConfig: { thinkingBudget: 32768 }
+        tools: [{ googleSearch: {} }]
       }
     });
 
