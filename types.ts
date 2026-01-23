@@ -47,6 +47,12 @@ export interface ComparisonResult {
   manualObservations?: string;
 }
 
+export interface AppSettings {
+  detailLevel: 'Conciso' | 'Normal' | 'Muito Detalhado';
+  defaultSeverity: 'Baixa' | 'Média' | 'Alta';
+  tone: 'Técnico' | 'Formal' | 'Direto';
+}
+
 export interface Inspection {
   id: string;
   clientName: string; // Proprietário

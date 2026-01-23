@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import localforage from 'localforage';
-import { Inspection, Room, COMMON_ROOMS, Photo, Video } from './types';
+import { Inspection, Room, COMMON_ROOMS, Photo, Video, AppSettings } from './types';
 import PhotoUploader from './components/PhotoUploader';
 import VideoUploader from './components/VideoUploader';
 import VoiceTranscription from './components/VoiceTranscription';
@@ -9,11 +9,18 @@ import InspectionReport from './components/InspectionReport';
 import { performComparisonAI, analyzeRoomMediaAI } from './services/geminiService';
 
 const DEFAULT_INSPECTOR = "David Oliveira - Creci 84926-F";
+const DEFAULT_SETTINGS: AppSettings = {
+  detailLevel: 'Normal',
+  defaultSeverity: 'Média',
+  tone: 'Técnico'
+};
 
 const App: React.FC = () => {
   const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [current, setCurrent] = useState<Inspection | null>(null);
-  const [view, setView] = useState<'list' | 'editor' | 'report' | 'comparison' | 'type_selector'>('list');
+  const [view, setView] = useState<'list' | 'editor' | 'report' | 'comparison' | 'type_selector' | 'settings'>('list');
   const [isBusy, setIsBusy] = useState(false);
   const [editingRoom, setEditingRoom] = useState<string | null>(null);
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
@@ -23,17 +30,40 @@ const App: React.FC = () => {
   const [pdfExit, setPdfExit] = useState<string | null>(null);
   const [manualComparisonObs, setManualComparisonObs] = useState('');
 
+  // Carregar vistorias e configurações ao iniciar
   useEffect(() => {
-    localforage.getItem<Inspection[]>('qdez_rascunhos').then(data => {
-      if (data) setInspections(data);
+    Promise.all([
+      localforage.getItem<Inspection[]>('qdez_rascunhos'),
+      localforage.getItem<AppSettings>('qdez_settings')
+    ]).then(([storedInspections, storedSettings]) => {
+      if (storedInspections) setInspections(storedInspections);
+      if (storedSettings) setSettings(storedSettings);
+      setIsLoaded(true);
     });
   }, []);
 
+  // Persistência automática
   useEffect(() => {
-    if (inspections.length > 0) {
+    if (isLoaded) {
       localforage.setItem('qdez_rascunhos', inspections);
+      localforage.setItem('qdez_settings', settings);
     }
-  }, [inspections]);
+  }, [inspections, settings, isLoaded]);
+
+  // Calculate room summary based on current inspection rooms to fix "Cannot find name 'roomSummary'" error
+  const roomSummary = useMemo(() => {
+    if (!current || current.rooms.length === 0) return null;
+    const summary = {
+      'Ótimo': 0,
+      'Bom': 0,
+      'Regular': 0,
+      'Ruim': 0
+    };
+    current.rooms.forEach(room => {
+      summary[room.condition]++;
+    });
+    return summary;
+  }, [current?.rooms]);
 
   const saveToGlobalList = (updatedIns: Inspection) => {
     setInspections(prev => {
@@ -41,6 +71,19 @@ const App: React.FC = () => {
       return [updatedIns, ...filtered];
     });
     setLastSaved(new Date().toLocaleTimeString());
+  };
+
+  const deleteInspection = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const confirmDelete = window.confirm("ATENÇÃO: Deseja realmente excluir esta vistoria? Esta ação é permanente.");
+    
+    if (confirmDelete) {
+      setInspections(prev => prev.filter(ins => ins.id !== id));
+      if (current?.id === id) {
+        setCurrent(null);
+        setView('list');
+      }
+    }
   };
 
   const updateCurrent = (updates: Partial<Inspection>) => {
@@ -75,8 +118,12 @@ const App: React.FC = () => {
         ...room.videos.map(v => ({ data: v.data, mimeType: v.mimeType }))
       ];
 
-      // Analisamos as mídias mais recentes/relevantes (limite técnico do modelo)
-      const result = await analyzeRoomMediaAI(room.customName || room.type, current.type, mediaToAnalyze.slice(-10));
+      const result = await analyzeRoomMediaAI(
+        room.customName || room.type, 
+        current.type, 
+        mediaToAnalyze.slice(-10),
+        settings
+      );
       
       if (result) {
         const itemsText = result.itensIdentificados
@@ -160,20 +207,11 @@ const App: React.FC = () => {
     }
   };
 
-  const roomSummary = useMemo(() => {
-    if (!current) return null;
-    const counts: Record<string, number> = { Ótimo: 0, Bom: 0, Regular: 0, Ruim: 0 };
-    current.rooms.forEach(r => {
-      counts[r.condition]++;
-    });
-    return counts;
-  }, [current]);
-
   const handleRunComparison = async () => {
     if (!pdfEntry || !pdfExit || !current) return;
     setIsBusy(true);
     try {
-      const res = await performComparisonAI(pdfEntry, pdfExit, manualComparisonObs);
+      const res = await performComparisonAI(pdfEntry, pdfExit, settings, manualComparisonObs);
       const updatedComparisonResult = {
         ...res,
         manualObservations: manualComparisonObs
@@ -183,7 +221,7 @@ const App: React.FC = () => {
         ...current, 
         comparisonResult: updatedComparisonResult, 
         status: 'completed' as const,
-        date: new Date().toISOString() // Data da vistoria é a mesma da realização do laudo
+        date: new Date().toISOString()
       };
       
       setCurrent(updatedCurrent);
@@ -204,20 +242,107 @@ const App: React.FC = () => {
             <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-black">Q</div>
             <h1 className="font-black uppercase text-sm tracking-tighter">Qdez Vistoria AI</h1>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => confirmNewInspection('Comparação')} className="bg-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase hover:bg-slate-600 transition-colors">Comparar PDFs</button>
+          <div className="flex gap-4 items-center">
+            <button 
+              onClick={() => setView('settings')} 
+              className={`p-2 rounded-xl transition-colors ${view === 'settings' ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+              title="Configurações da IA"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
             <button onClick={startNewSequence} className="bg-red-600 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase hover:bg-red-700 transition-colors shadow-lg">+ Nova Vistoria</button>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 w-full flex-1">
+        {view === 'settings' && (
+          <div className="max-w-xl mx-auto py-10 animate-in fade-in zoom-in-95 duration-300">
+            <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-black uppercase tracking-tighter">Parâmetros David Oliveira</h2>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Personalize o comportamento da IA</p>
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                {/* Nível de Detalhe */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nível de Detalhamento Técnico</label>
+                  <div className="grid grid-cols-3 gap-2 p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                    {(['Conciso', 'Normal', 'Muito Detalhado'] as const).map(option => (
+                      <button 
+                        key={option}
+                        onClick={() => setSettings(s => ({ ...s, detailLevel: option }))}
+                        className={`py-3 text-[9px] font-black uppercase rounded-xl transition-all ${settings.detailLevel === option ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[8px] text-slate-400 font-medium px-1">"Muito Detalhado" aumentará o rigor com texturas e marcas de uso leves.</p>
+                </div>
+
+                {/* Gravidade Padrão */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Gravidade Sugerida (Danos Ambíguos)</label>
+                  <div className="grid grid-cols-3 gap-2 p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                    {(['Baixa', 'Média', 'Alta'] as const).map(option => (
+                      <button 
+                        key={option}
+                        onClick={() => setSettings(s => ({ ...s, defaultSeverity: option }))}
+                        className={`py-3 text-[9px] font-black uppercase rounded-xl transition-all ${settings.defaultSeverity === option ? 'bg-red-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tom de Voz */}
+                <div className="space-y-3">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Tom da Redação</label>
+                  <div className="grid grid-cols-3 gap-2 p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                    {(['Técnico', 'Formal', 'Direto'] as const).map(option => (
+                      <button 
+                        key={option}
+                        onClick={() => setSettings(s => ({ ...s, tone: option }))}
+                        className={`py-3 text-[9px] font-black uppercase rounded-xl transition-all ${settings.tone === option ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-10 pt-8 border-t border-slate-100 flex gap-4">
+                <button 
+                  onClick={() => setView('list')} 
+                  className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all"
+                >
+                  Salvar e Voltar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {view === 'list' && (
           <div className="space-y-8 animate-in fade-in duration-500">
             <section>
               <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Relatórios Ativos</h2>
               <div className="grid gap-4">
-                {inspections.filter(i => i.status === 'draft').length === 0 ? (
+                {!isLoaded ? (
+                   <div className="p-20 text-center text-slate-300 font-black uppercase text-[10px] animate-pulse">Carregando Banco de Dados...</div>
+                ) : (inspections.filter(i => i.status === 'draft').length === 0 ? (
                   <div className="p-16 border-2 border-dashed border-slate-200 rounded-[3rem] text-center bg-white/50">
                     <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Inicie um novo laudo profissional</p>
                     <button onClick={startNewSequence} className="mt-4 text-red-600 font-black text-xs uppercase hover:underline">Criar Vistoria</button>
@@ -225,7 +350,7 @@ const App: React.FC = () => {
                 ) : (
                   inspections.filter(i => i.status === 'draft').map(ins => (
                     <div key={ins.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 flex justify-between items-center hover:border-red-500 transition-all cursor-pointer group" onClick={() => { setCurrent(ins); setView(ins.type === 'Comparação' ? 'comparison' : 'editor'); }}>
-                      <div>
+                      <div className="flex-1">
                         <div className="flex gap-2 items-center mb-1">
                           <span className="text-[9px] font-black uppercase text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{ins.type}</span>
                           <span className="text-[9px] font-bold text-slate-400">#{ins.id}</span>
@@ -233,12 +358,23 @@ const App: React.FC = () => {
                         <h3 className="font-bold text-slate-800 group-hover:text-red-600 transition-colors">{ins.address || 'Endereço Pendente'}</h3>
                         <p className="text-[10px] text-slate-500 font-medium">Locatário: {ins.tenantName || 'Não informado'}</p>
                       </div>
-                      <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center group-hover:bg-red-50 transition-colors">
-                        <svg className="w-5 h-5 text-slate-300 group-hover:text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"/></svg>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={(e) => deleteInspection(ins.id, e)}
+                          className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-red-50 text-slate-300 hover:text-red-600 transition-all active:scale-90"
+                          title="Excluir Vistoria"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                        <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center group-hover:bg-red-50 transition-colors">
+                          <svg className="w-5 h-5 text-slate-300 group-hover:text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7"/></svg>
+                        </div>
                       </div>
                     </div>
                   ))
-                )}
+                ))}
               </div>
             </section>
           </div>
@@ -405,20 +541,20 @@ const App: React.FC = () => {
                       <div className="space-y-4">
                         <div className="flex justify-between items-center bg-slate-900 p-2.5 rounded-2xl shadow-xl">
                           <div className="flex gap-3">
-                             <VoiceTranscription onTranscriptionComplete={(text) => updateRoom(room.id, { description: (room.description + '\n' + text).trim() })} />
+                             <VoiceTranscription settings={settings} onTranscriptionComplete={(text) => updateRoom(room.id, { description: (room.description + '\n' + text).trim() })} />
                              <button 
                                onClick={() => handleManualRoomAnalysis(room.id)}
                                disabled={processingRoomId === room.id}
                                className="flex items-center gap-2.5 px-5 py-2.5 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase transition-all shadow-md active:scale-95 disabled:opacity-50 hover:bg-red-700"
                              >
                                <svg className={`w-4 h-4 ${processingRoomId === room.id ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                               Análise Técnica IA (David Oliveira)
+                               Análise Técnica IA
                              </button>
                           </div>
                         </div>
                         <textarea 
                           className="w-full bg-white p-6 rounded-[2rem] border border-slate-200 text-xs h-64 leading-relaxed focus:ring-4 focus:ring-red-50 outline-none transition-all shadow-inner font-medium text-slate-700" 
-                          placeholder="Clique em 'Análise Técnica IA' para que David Oliveira gere uma descrição detalhada e inventário do ambiente com base nas mídias enviadas..." 
+                          placeholder="A IA David Oliveira gerará uma descrição detalhada seguindo suas configurações de detalhamento e tom..." 
                           value={room.description} 
                           onChange={(e) => updateRoom(room.id, { description: e.target.value })} 
                         />
@@ -482,7 +618,7 @@ const App: React.FC = () => {
                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Observações Manuais do Perito</label>
                    <textarea 
                      className="w-full bg-slate-50 p-6 rounded-[2rem] border border-slate-200 text-xs h-36 leading-relaxed focus:ring-4 focus:ring-red-50 outline-none transition-all shadow-inner font-medium"
-                     placeholder="Aponte danos específicos, faltas de chaves ou detalhes periciais para a IA analisar com mais rigor..."
+                     placeholder="Aponte danos específicos, faltas de chaves ou detalhes periciais..."
                      value={manualComparisonObs}
                      onChange={(e) => setManualComparisonObs(e.target.value)}
                    />
@@ -508,7 +644,7 @@ const App: React.FC = () => {
           <div className="bg-white p-16 rounded-[4rem] max-w-sm w-full text-center shadow-[0_0_120px_rgba(220,38,38,0.15)] border border-red-50">
             <div className="w-24 h-24 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-10 shadow-inner"></div>
             <h3 className="font-black text-slate-900 uppercase text-xl mb-4 tracking-tighter">Perícia David Oliveira</h3>
-            <p className="text-[11px] text-slate-400 font-bold uppercase leading-relaxed tracking-[0.2em]">Cruzando dados visuais dos laudos e buscando custos de reparo atuais via Google Search...</p>
+            <p className="text-[11px] text-slate-400 font-bold uppercase leading-relaxed tracking-[0.2em]">Consultando parâmetros personalizados e cruzando dados visuais...</p>
           </div>
         </div>
       )}

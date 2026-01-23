@@ -1,23 +1,41 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
+import { AppSettings } from "../types";
 
-const VISTORIADOR_SYSTEM_INSTRUCTION = `
+const getSystemInstruction = (settings: AppSettings) => {
+  let detailInstruction = "";
+  if (settings.detailLevel === 'Conciso') {
+    detailInstruction = "Seja extremamente breve e direto. Foque apenas no estado geral e danos críticos.";
+  } else if (settings.detailLevel === 'Muito Detalhado') {
+    detailInstruction = "Seja exaustivo. Descreva materiais, texturas, marcas aparentes de desgaste e faça um inventário minucioso de cada centímetro do ambiente.";
+  }
+
+  const severityInstruction = `Em caso de dúvidas sobre danos, classifique a gravidade como '${settings.defaultSeverity}' por padrão.`;
+  const toneInstruction = `Use um tom predominantemente ${settings.tone}.`;
+
+  return `
 Você é David Oliveira (Creci 84926-F), um Vistoriador Profissional de Imóveis especialista em laudos periciais.
-Sua tarefa é REDIGIR descrições técnicas PRECISAS, DETALHADAS e OBJETIVAS para laudos de vistoria imobiliária.
+Sua tarefa é REDIGIR descrições técnicas PRECISAS para laudos de vistoria imobiliária.
 
-REGRAS DE OURO:
-- Use linguagem formal e técnica (ex: "piso em porcelanato acetinado", "pintura látex fosca", "esquadrias em alumínio anodizado").
-- Foque estritamente no ESTADO DE CONSERVAÇÃO (novo, íntegro, avariado, com marcas de uso, com sujidade, etc).
+ESTILO ESPECÍFICO:
+- ${detailInstruction}
+- ${severityInstruction}
+- ${toneInstruction}
+
+REGRAS GERAIS:
+- Use linguagem profissional (ex: "piso em porcelanato acetinado", "pintura látex fosca").
+- Foque estritamente no ESTADO DE CONSERVAÇÃO (novo, íntegro, avariado, com marcas de uso).
 - Não presuma causas de danos. Relate apenas o que é visualmente observável.
-- Ao analisar fotos/vídeos, faça um inventário detalhado de todos os itens (portas, janelas, tomadas, interruptores, luminárias, móveis fixos).
-- Diferencie o tom conforme o tipo de laudo:
-  - ENTRADA: Registro minucioso do estado inicial para garantia das partes.
-  - SAÍDA: Foco na comparação e desgaste/danos durante a locação.
-  - CONSTATAÇÃO: Relato fiel da situação em um momento específico.
 - Organize os itens em listas para facilitar a leitura técnica.
 `;
+};
 
-export const analyzeRoomMediaAI = async (roomType: string, inspectionType: string, mediaItems: { data: string, mimeType: string }[]): Promise<any> => {
+export const analyzeRoomMediaAI = async (
+  roomType: string, 
+  inspectionType: string, 
+  mediaItems: { data: string, mimeType: string }[],
+  settings: AppSettings
+): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const hasVideo = mediaItems.some(item => item.mimeType.startsWith('video/'));
@@ -27,8 +45,8 @@ export const analyzeRoomMediaAI = async (roomType: string, inspectionType: strin
     { text: `Analise as mídias deste ambiente (${roomType}) para um Laudo de ${inspectionType}.
     
     TAREFAS:
-    1. Gere uma descrição técnica detalhada do ambiente (pisos, paredes, tetos).
-    2. Liste todos os itens identificados e descreva o estado de conservação de cada um de forma precisa.
+    1. Gere uma descrição técnica detalhada do ambiente.
+    2. Liste todos os itens identificados e descreva o estado de conservação.
     3. Identifique evidências de danos ou falta de manutenção.
     
     Retorne os dados em formato JSON estruturado.` },
@@ -45,7 +63,7 @@ export const analyzeRoomMediaAI = async (roomType: string, inspectionType: strin
       model: modelName,
       contents: { parts },
       config: {
-        systemInstruction: VISTORIADOR_SYSTEM_INSTRUCTION,
+        systemInstruction: getSystemInstruction(settings),
         responseMimeType: "application/json",
         thinkingConfig: modelName === 'gemini-3-pro-preview' ? { thinkingBudget: 24576 } : undefined,
         responseSchema: {
@@ -90,15 +108,20 @@ export const analyzeRoomMediaAI = async (roomType: string, inspectionType: strin
   }
 };
 
-export const performComparisonAI = async (entryPdf: string, exitPdf: string, manualObs?: string): Promise<any> => {
+export const performComparisonAI = async (
+  entryPdf: string, 
+  exitPdf: string, 
+  settings: AppSettings,
+  manualObs?: string
+): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const prompt = `
     AJA COMO PERITO: Compare os laudos de ENTRADA e SAÍDA anexados.
     IDENTIFIQUE DIVERGÊNCIAS de estado e danos.
     ${manualObs ? `CONSIDERE ESTAS OBSERVAÇÕES ADICIONAIS DO VISTORIADOR: "${manualObs}"` : ''}
     
-    Use o Google Search para encontrar custos estimados de reparo ou troca no mercado atual para os danos encontrados.
-    Gere um laudo pericial de divergências detalhado.
+    Use o Google Search para encontrar custos estimados de reparo no mercado atual.
+    Gere um laudo pericial de divergências detalhado seguindo o estilo: Nível de Detalhe ${settings.detailLevel}, Tom ${settings.tone}.
   `;
 
   try {
@@ -112,7 +135,7 @@ export const performComparisonAI = async (entryPdf: string, exitPdf: string, man
         ]
       },
       config: {
-        systemInstruction: VISTORIADOR_SYSTEM_INSTRUCTION,
+        systemInstruction: getSystemInstruction(settings),
         tools: [{ googleSearch: {} }],
         thinkingConfig: { thinkingBudget: 32768 }
       }
@@ -132,17 +155,17 @@ export const performComparisonAI = async (entryPdf: string, exitPdf: string, man
   }
 };
 
-export const transcribeAudio = async (base64Audio: string, mimeType: string = 'audio/webm'): Promise<string> => {
+export const transcribeAudio = async (base64Audio: string, settings: AppSettings, mimeType: string = 'audio/webm'): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-flash-lite-latest',
     contents: {
       parts: [
-        { text: "Transcreva este áudio de vistoria para um texto técnico formal e direto." },
+        { text: `Transcreva este áudio de vistoria para um texto técnico formal. Siga o tom: ${settings.tone}.` },
         { inlineData: { data: base64Audio, mimeType: mimeType } }
       ]
     },
-    config: { systemInstruction: VISTORIADOR_SYSTEM_INSTRUCTION }
+    config: { systemInstruction: getSystemInstruction(settings) }
   });
   return response.text || "";
 };

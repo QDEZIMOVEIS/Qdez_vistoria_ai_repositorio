@@ -1,12 +1,14 @@
 
 import React, { useState, useRef } from 'react';
 import { transcribeAudio } from '../services/geminiService';
+import { AppSettings } from '../types';
 
 interface VoiceTranscriptionProps {
   onTranscriptionComplete: (text: string) => void;
+  settings: AppSettings;
 }
 
-const VoiceTranscription: React.FC<VoiceTranscriptionProps> = ({ onTranscriptionComplete }) => {
+const VoiceTranscription: React.FC<VoiceTranscriptionProps> = ({ onTranscriptionComplete, settings }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -62,7 +64,7 @@ const VoiceTranscription: React.FC<VoiceTranscriptionProps> = ({ onTranscription
     setIsProcessing(true);
     try {
       const base64 = await blobToBase64(blob);
-      const text = await transcribeAudio(base64, 'audio/webm');
+      const text = await transcribeAudio(base64, settings, 'audio/webm');
       if (text) {
         onTranscriptionComplete(text);
       }
@@ -113,5 +115,4 @@ const VoiceTranscription: React.FC<VoiceTranscriptionProps> = ({ onTranscription
   );
 };
 
-// Fixed: Adding default export for VoiceTranscription
 export default VoiceTranscription;
