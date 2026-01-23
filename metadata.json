@@ -3,6 +3,7 @@
   "description": "Ferramenta profissional de vistoria com análise multimodal (Fotos e Vídeos) via IA e laudos PDF automatizados.",
   "requestFramePermissions": [
     "camera",
-    "microphone"
+    "microphone",
+    "geolocation"
   ]
 }
