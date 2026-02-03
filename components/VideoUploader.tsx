@@ -27,13 +27,13 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideosAdded }) => {
         };
 
         reader.onload = (e) => {
+          // Fix: Removed 'processed' property as it is not part of the Video type definition
           resolve({
             id: Math.random().toString(36).substr(2, 9),
             data: e.target?.result as string,
             mimeType: file.type,
             size: file.size,
-            duration: video.duration,
-            processed: false
+            duration: video.duration
           });
         };
         reader.readAsDataURL(file);

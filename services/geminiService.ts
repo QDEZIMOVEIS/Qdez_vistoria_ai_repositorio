@@ -2,38 +2,95 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppSettings } from "../types";
 
-const getSystemInstruction = (settings: AppSettings, context: 'analysis' | 'comparison' = 'analysis') => {
+const getSystemInstruction = (settings: AppSettings, context: 'analysis' | 'comparison' | 'image_edit' = 'analysis') => {
   const detailInstruction = {
     'Conciso': "Seja extremamente breve e direto. Foque apenas no estado geral e danos críticos.",
     'Normal': "Descreva o estado de conservação de forma equilibrada e técnica.",
     'Muito Detalhado': "Seja exaustivo. Descreva materiais, texturas, marcas de uso e faça um inventário minucioso."
   }[settings.detailLevel];
 
-  const severityInstruction = `Em caso de dúvidas sobre danos, classifique a gravidade como '${settings.defaultSeverity}' por padrão.`;
-  const toneInstruction = `Use um tom predominantemente ${settings.tone}.`;
-
   if (context === 'comparison') {
-    return `Você é David Oliveira (Creci 84926-F), um Perito Vistoriador Imobiliário.
-Sua tarefa é COMPARAR dois laudos (Entrada e Saída) e identificar DIVERGÊNCIAS.
-- Foque em danos novos, itens faltantes ou mudanças no estado de conservação.
-- Use o Google Search para encontrar preços reais de reparo no mercado brasileiro (estimados).
-- Seja imparcial e estritamente técnico.
-- ${detailInstruction}
-- ${toneInstruction}`;
+    return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador.
+Sua tarefa é COMPARAR dois laudos (Entrada e Saída) e identificar DIVERGÊNCIAS DOCUMENTAIS.
+REGRAS:
+- Linguagem formal, clara e objetiva.
+- Registre apenas o que é OBSERVÁVEL.
+- Identifique danos novos ou mudanças no estado de conservação.
+- Use Google Search para estimar custos de reparo no mercado brasileiro.
+- ${detailInstruction}`;
   }
 
-  return `Você é David Oliveira (Creci 84926-F), um Vistoriador Profissional de Imóveis.
-Sua tarefa é REDIGIR descrições técnicas PRECISAS para vistorias.
-- Use linguagem técnica (ex: "pintura látex fosca", "esquadrias de alumínio").
-- Relate apenas o que é visualmente observável.
-- ${detailInstruction}
-- ${severityInstruction}
-- ${toneInstruction}`;
+  if (context === 'image_edit') {
+    return `Você é um editor de imagens especializado em perícia imobiliária. 
+Sua tarefa é modificar a imagem conforme o comando do usuário para fins de documentação técnica. 
+Mantenha o realismo e a precisão técnica. Se o usuário pedir para remover algo, use preenchimento generativo coerente.`;
+  }
+
+  return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional.
+Sua tarefa é REDIGIR a descrição técnica de uma VISTORIA com linguagem FORMAL e OBJETIVA.
+REGRAS:
+- Escreva em português do Brasil, tom formal e impessoal.
+- Use frases curtas. Não use adjetivos subjetivos.
+- Não presuma causa. Descreva o fato.
+- Informe material, cor, acabamento e estado.
+- ${detailInstruction}`;
 };
 
 /**
- * Analisa mídias de um ambiente para gerar descrição técnica.
+ * Edita uma imagem com base em um prompt de texto usando Gemini 2.5 Flash Image.
  */
+export const editImageAI = async (
+  imageData: string,
+  prompt: string,
+  settings: AppSettings
+): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const modelName = 'gemini-2.5-flash-image';
+
+  // O payload deve ser limpo (apenas base64, sem o prefixo data:...)
+  const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Data,
+              mimeType: 'image/jpeg',
+            },
+          },
+          {
+            text: prompt,
+          },
+        ],
+      },
+      config: {
+        systemInstruction: getSystemInstruction(settings, 'image_edit'),
+        imageConfig: {
+          aspectRatio: "4:3"
+        }
+      }
+    });
+
+    // O modelo retorna a imagem editada em um dos parts da resposta
+    const candidate = response.candidates?.[0];
+    if (!candidate?.content?.parts) throw new Error("Resposta da IA vazia.");
+
+    for (const part of candidate.content.parts) {
+      if (part.inlineData) {
+        return `data:image/jpeg;base64,${part.inlineData.data}`;
+      }
+    }
+    
+    throw new Error("O modelo não retornou uma imagem editada.");
+  } catch (error) {
+    console.error("Erro na edição de imagem IA:", error);
+    throw error;
+  }
+};
+
 export const analyzeRoomMediaAI = async (
   roomType: string, 
   inspectionType: string, 
@@ -41,22 +98,12 @@ export const analyzeRoomMediaAI = async (
   settings: AppSettings
 ): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  
-  // Modelos conforme diretrizes: Flash para velocidade/multimodal, Pro para complexidade
   const modelName = 'gemini-3-flash-preview';
 
   const parts = [
-    { text: `Analise as mídias deste ambiente (${roomType}) para um Laudo de ${inspectionType}.
-    
-    TAREFAS:
-    1. Gere uma descrição técnica detalhada seguindo as instruções de sistema.
-    2. Liste itens e estados de conservação.
-    3. Identifique evidências de danos.
-    
-    RETORNE EM JSON.` },
+    { text: `Analise as mídias deste ambiente (${roomType}) para um Laudo de ${inspectionType}. Retorne JSON.` },
     ...mediaItems.map(item => ({
       inlineData: {
-        // Garante que enviamos apenas a parte base64
         data: item.data.includes('base64,') ? item.data.split('base64,')[1] : item.data,
         mimeType: item.mimeType
       }
@@ -92,7 +139,7 @@ export const analyzeRoomMediaAI = async (
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  timestampOuLocal: { type: Type.STRING },
+                  local: { type: Type.STRING },
                   descricao: { type: Type.STRING },
                   gravidade: { type: Type.STRING, enum: ["Baixa", "Média", "Alta"] }
                 }
@@ -104,19 +151,13 @@ export const analyzeRoomMediaAI = async (
       }
     });
 
-    const text = response.text;
-    if (!text) throw new Error("Resposta da IA vazia");
-    
-    return JSON.parse(text.replace(/```json/g, "").replace(/```/g, "").trim());
+    return JSON.parse(response.text.replace(/```json/g, "").replace(/```/g, "").trim());
   } catch (error) {
-    console.error("Erro detalhado na análise IA:", error);
+    console.error("Erro análise IA:", error);
     throw error;
   }
 };
 
-/**
- * Realiza comparação pericial entre dois PDFs.
- */
 export const performComparisonAI = async (
   entryPdf: string, 
   exitPdf: string, 
@@ -124,23 +165,18 @@ export const performComparisonAI = async (
   manualObs?: string
 ): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const modelName = 'gemini-3-flash-preview';
   
-  // Prompt refinado para comparação documental
-  const prompt = `AJA COMO PERITO: Compare o Laudo de ENTRADA (PDF 1) com o Laudo de SAÍDA (PDF 2).
-  
-DETERMINE AS DIVERGÊNCIAS:
-1. Itens presentes na entrada que faltam na saída.
-2. Danos novos (trincas, manchas, quebras) que não existiam no laudo de entrada.
-3. Mudanças significativas no estado de conservação.
-
-${manualObs ? `OBSERVAÇÕES DO VISTORIADOR PARA FOCO: "${manualObs}"` : ''}
-
-IMPORTANTE: Use o Google Search para estimar custos de reparo/substituição para as divergências encontradas.
-Apresente o resultado em Markdown profissional.`;
+  const prompt = `PERÍCIA COMPARATIVA:
+Compare o Laudo de ENTRADA (PDF 1) com o Laudo de SAÍDA (PDF 2).
+Identifique danos novos, itens faltantes ou desgaste excessivo.
+${manualObs ? `FOCO ESPECÍFICO: "${manualObs}"` : ''}
+Use Google Search para referenciar custos de reparo.
+Retorne em Markdown técnico.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: modelName,
       contents: {
         parts: [
           { text: prompt },
@@ -154,25 +190,20 @@ Apresente o resultado em Markdown profissional.`;
       }
     });
 
-    const analysis = response.text || "Falha ao gerar texto da análise.";
-    
-    // Extração de fontes do Google Search
+    const analysis = response.text || "Erro na geração do parecer.";
     const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
       ?.map((chunk: any) => ({
-        title: chunk.web?.title || "Referência de Preço",
+        title: chunk.web?.title || "Fonte de Custo",
         uri: chunk.web?.uri
       })).filter((s: any) => s.uri) || [];
 
     return { analysis, sources };
   } catch (error) {
-    console.error("Erro detalhado na comparação pericial:", error);
+    console.error("Erro Comparação:", error);
     throw error;
   }
 };
 
-/**
- * Transcreve áudio para texto técnico.
- */
 export const transcribeAudio = async (base64Audio: string, settings: AppSettings, mimeType: string = 'audio/webm'): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
@@ -180,15 +211,13 @@ export const transcribeAudio = async (base64Audio: string, settings: AppSettings
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          { text: `Transcreva este áudio de vistoria. Tom: ${settings.tone}. Converta gírias para termos técnicos imobiliários.` },
+          { text: `Transcreva este áudio de vistoria. Converta para linguagem técnica. Tom: ${settings.tone}.` },
           { inlineData: { data: base64Audio, mimeType: mimeType } }
         ]
-      },
-      config: { systemInstruction: getSystemInstruction(settings, 'analysis') }
+      }
     });
     return response.text || "";
   } catch (error) {
-    console.error("Erro na transcrição:", error);
     return "";
   }
 };

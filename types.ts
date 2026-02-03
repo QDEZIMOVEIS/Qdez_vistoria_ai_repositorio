@@ -3,6 +3,7 @@ export interface Photo {
   id: string;
   data: string; // base64
   mimeType: string;
+  label?: string; // Tag para identificar o item (ex: "Parede Norte", "Piso Entrada")
 }
 
 export interface Video {
@@ -12,7 +13,6 @@ export interface Video {
   thumbnail?: string;
   duration?: number;
   size?: number;
-  processed?: boolean;
 }
 
 export interface AIAnalysis {
@@ -55,16 +55,16 @@ export interface AppSettings {
 
 export interface Inspection {
   id: string;
-  clientName: string; // Proprietário
-  tenantName: string; // Locatário / Interessado
-  inspectorName: string; // Responsável pela Vistoria
+  clientName: string; // Proprietário/Locador
+  tenantName: string; // Locatário
+  inspectorName: string; 
   type: 'Entrada' | 'Saída' | 'Constatação' | 'Comparação'; 
   address: string;
   date: string;
   rooms: Room[];
   status: 'draft' | 'completed';
+  isSynced?: boolean;
   comparisonResult?: ComparisonResult;
-  shareToken?: string;
 }
 
 export const COMMON_ROOMS = [
