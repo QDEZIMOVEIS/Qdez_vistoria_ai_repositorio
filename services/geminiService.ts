@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { AppSettings } from "../types";
 
 const stripDataUrl = (value: string) => {
@@ -136,7 +136,7 @@ export const analyzeRoomMediaAI = async (
     throw new Error("Chave de API do Gemini não encontrada.");
   }
   const ai = new GoogleGenAI({ apiKey });
-  const modelName = 'gemini-3.1-pro-preview';
+  const modelName = 'gemini-3-flash-preview';
 
   if (!mediaItems || mediaItems.length === 0) {
     throw new Error('Nenhuma mídia foi enviada para análise.');
@@ -170,7 +170,7 @@ export const analyzeRoomMediaAI = async (
   };
 
   // limita a carga para evitar estouro e travamento
-  const limitedMedia = mediaItems.slice(0, 8);
+  const limitedMedia = mediaItems.slice(0, 5);
 
   const parts = [
     {
@@ -300,8 +300,25 @@ Retorne APENAS o JSON conforme o esquema.
       throw new Error('As mídias estão muito pesadas para análise. Reduza a quantidade ou tamanho.');
     }
 
+    if (message.includes('SAFETY')) {
+      throw new Error('A análise foi bloqueada pelos filtros de segurança da IA. Tente mídias diferentes.');
+    }
+
+    if (message.includes('429') || message.toLowerCase().includes('quota') || message.toLowerCase().includes('limit')) {
+      throw new Error('Limite de uso da IA atingido. Tente novamente em alguns minutos.');
+    }
+
     if (message.includes('JSON')) {
-      throw new Error('A IA respondeu em formato inválido. Tente novamente.');
+      throw new Error('A IA gerou um formato de resposta incompatível. Tente novamente.');
+    }
+
+    if (message.toLowerCase().includes('overloaded') || message.toLowerCase().includes('service unavailable')) {
+      throw new Error('O serviço da IA está sobrecarregado no momento. Tente novamente.');
+    }
+
+    // Se for um erro desconhecido, tentamos mostrar um pouco mais de contexto se for útil
+    if (message.length > 2 && message.length < 150) {
+      throw new Error(`Erro na IA: ${message}`);
     }
 
     throw new Error('Não foi possível concluir a análise deste ambiente com IA.');

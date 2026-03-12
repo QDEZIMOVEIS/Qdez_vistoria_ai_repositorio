@@ -732,7 +732,13 @@ const App: React.FC = () => {
                             </div>
                             <div className="flex-1">
                               <p className="text-[10px] text-red-600 font-black uppercase tracking-widest">Erro na Análise Técnica</p>
-                              <p className="text-[9px] text-red-500 font-bold mt-0.5">{analysisError}</p>
+                              <p className="text-[9px] text-red-500 font-bold mt-0.5 mb-1.5">{analysisError}</p>
+                              <button 
+                                onClick={() => handleManualRoomAnalysis(room.id)}
+                                className="text-[8px] font-black text-red-600 hover:text-red-700 underline uppercase tracking-tighter"
+                              >
+                                Tentar Novamente
+                              </button>
                             </div>
                           </div>
                         )}
