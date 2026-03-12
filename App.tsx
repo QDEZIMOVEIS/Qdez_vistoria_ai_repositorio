@@ -127,12 +127,15 @@ const App: React.FC = () => {
     setView('report');
   };
 
-  const handleManualRoomAnalysis = async (roomId: string) => {
+  const handleManualRoomAnalysis = async (roomId: string, overrideVideos?: Video[], overridePhotos?: Photo[]) => {
     if (!current) return;
     const room = current.rooms.find(r => r.id === roomId);
     if (!room) return;
 
-    if (room.photos.length === 0 && room.videos.length === 0) {
+    const photos = overridePhotos || room.photos;
+    const videos = overrideVideos || room.videos;
+
+    if (photos.length === 0 && videos.length === 0) {
       alert("Por favor, adicione fotos ou vídeos para análise.");
       return;
     }
@@ -140,8 +143,8 @@ const App: React.FC = () => {
     setProcessingRoomId(roomId);
     try {
       const mediaItems = [
-        ...room.photos.map(p => ({ data: p.data, mimeType: p.mimeType })),
-        ...room.videos.map(v => ({ data: v.data, mimeType: v.mimeType }))
+        ...photos.map(p => ({ data: p.data, mimeType: p.mimeType })),
+        ...videos.map(v => ({ data: v.data, mimeType: v.mimeType }))
       ];
 
       const analysis = await analyzeRoomMediaAI(room.type, current.type, mediaItems, settings);
@@ -168,7 +171,7 @@ const App: React.FC = () => {
       });
     } catch (err) {
       console.error("Erro na análise técnica:", err);
-      alert("Houve um erro ao processar a análise com IA.");
+      // Silencioso se for automático para não interromper o fluxo, ou logar erro
     } finally {
       setProcessingRoomId(null);
     }
@@ -516,7 +519,12 @@ const App: React.FC = () => {
                         />
                         <VideoUploader 
                           videos={room.videos}
-                          onVideosAdded={(newVideos) => updateRoom(room.id, { videos: [...room.videos, ...newVideos] })} 
+                          onVideosAdded={(newVideos) => {
+                            const updatedVideos = [...room.videos, ...newVideos];
+                            updateRoom(room.id, { videos: updatedVideos });
+                            // Dispara análise automática após upload de vídeo
+                            handleManualRoomAnalysis(room.id, updatedVideos);
+                          }} 
                           onRemoveVideo={(videoId) => updateRoom(room.id, { videos: room.videos.filter(v => v.id !== videoId) })}
                         />
                       </div>
