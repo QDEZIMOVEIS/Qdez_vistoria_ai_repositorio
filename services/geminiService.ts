@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppSettings } from "../types";
 
-const getSystemInstruction = (settings: AppSettings, context: 'analysis' | 'comparison' | 'image_edit' = 'analysis') => {
+const getSystemInstruction = (settings: AppSettings, context: 'analysis' | 'comparison' | 'image_edit' | 'repairs' = 'analysis') => {
   const detailInstruction = {
     'Conciso': "Seja extremamente breve e direto. Foque apenas no estado geral e danos críticos.",
     'Normal': "Descreva o estado de conservação de forma equilibrada e técnica.",
@@ -10,29 +10,44 @@ const getSystemInstruction = (settings: AppSettings, context: 'analysis' | 'comp
   }[settings.detailLevel];
 
   if (context === 'comparison') {
-    return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador.
+    return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador da Qdez Imóveis.
 Sua tarefa é COMPARAR dois laudos (Entrada e Saída) e identificar DIVERGÊNCIAS DOCUMENTAIS.
 REGRAS:
 - Linguagem formal, clara e objetiva.
 - Registre apenas o que é OBSERVÁVEL.
 - Identifique danos novos ou mudanças no estado de conservação.
+- Apresente divergências, resumo do estado geral, pontos que pioraram, pontos críticos e recomendações.
+- Incorpore as observações do vistoriador na conclusão.
 - Use Google Search para estimar custos de reparo no mercado brasileiro.
 - ${detailInstruction}`;
   }
 
+  if (context === 'repairs') {
+    return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional da Qdez Imóveis.
+Sua tarefa é analisar a CONSTATAÇÃO DE REPAROS.
+REGRAS:
+- Descreva o reparo constatado de forma técnica e objetiva.
+- Informe se o reparo foi concluído, parcial ou não executado com base nas evidências.
+- Gere um texto técnico adequado para laudo de constatação.
+- Se houver baixa confiança, escreva: "Necessita validação humana".`;
+  }
+
   if (context === 'image_edit') {
-    return `Você é um editor de imagens especializado em perícia imobiliária. 
+    return `Você é um editor de imagens especializado em perícia imobiliária para a Qdez Imóveis. 
 Sua tarefa é modificar a imagem conforme o comando do usuário para fins de documentação técnica. 
 Mantenha o realismo e a precisão técnica. Se o usuário pedir para remover algo, use preenchimento generativo coerente.`;
   }
 
-  return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional.
+  return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional da Qdez Imóveis.
 Sua tarefa é REDIGIR a descrição técnica de uma VISTORIA com linguagem FORMAL e OBJETIVA.
 REGRAS:
 - Escreva em português do Brasil, tom formal e impessoal.
 - Use frases curtas. Não use adjetivos subjetivos.
 - Não presuma causa. Descreva o fato.
 - Informe material, cor, acabamento e estado.
+- Descreva o cômodo em geral, itens identificados, estado de conservação e eventuais danos.
+- NÃO invente dados. Se não tiver certeza: "Necessita validação humana".
+- Para vídeos, inclua evidências com timestamp quando possível.
 - ${detailInstruction}`;
 };
 

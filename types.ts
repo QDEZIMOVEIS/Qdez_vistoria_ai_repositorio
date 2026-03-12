@@ -15,6 +15,13 @@ export interface Video {
   size?: number;
 }
 
+export interface Audio {
+  id: string;
+  data: string; // base64
+  mimeType: string;
+  transcription?: string;
+}
+
 export interface AIAnalysis {
   itens: any;
   evidencias: Array<{
@@ -31,8 +38,12 @@ export interface Room {
   description: string;
   photos: Photo[];
   videos: Video[];
+  audios?: Audio[];
   condition: 'Ótimo' | 'Bom' | 'Regular' | 'Ruim';
   aiAnalysis?: AIAnalysis;
+  // Campos para Constatação de Reparos
+  reparoDescricao?: string;
+  reparoStatus?: 'Concluído' | 'Parcial' | 'Não Executado';
 }
 
 export interface BudgetLink {
@@ -53,18 +64,25 @@ export interface AppSettings {
   tone: 'Técnico' | 'Formal' | 'Direto';
 }
 
+export interface Tenant {
+  nome: string;
+}
+
 export interface Inspection {
   id: string;
   clientName: string; // Proprietário/Locador
-  tenantName: string; // Locatário
+  tenantName: string; // Mantido para compatibilidade (primeiro locatário)
+  tenantNames?: string[]; // Lista de locatários para suporte a múltiplos
   inspectorName: string; 
   type: 'Entrada' | 'Saída' | 'Constatação' | 'Comparação'; 
+  subtipoConstatacao?: 'Padrão' | 'Reparos';
   address: string;
   date: string;
   rooms: Room[];
   status: 'draft' | 'completed';
   isSynced?: boolean;
   comparisonResult?: ComparisonResult;
+  observacoesGerais?: string;
 }
 
 export const COMMON_ROOMS = [

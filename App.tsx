@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import localforage from 'localforage';
-import { Inspection, Room, COMMON_ROOMS, Photo, Video, AppSettings } from './types';
+import { Inspection, Room, COMMON_ROOMS, Photo, Video, AppSettings, Audio } from './types';
 import PhotoUploader from './components/PhotoUploader';
 import VideoUploader from './components/VideoUploader';
 import VoiceTranscription from './components/VoiceTranscription';
@@ -90,11 +90,41 @@ const App: React.FC = () => {
     updateCurrent({ rooms });
   };
 
+  const deleteRoom = (roomId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!current) return;
+    if (!confirm("Tem certeza que deseja excluir este ambiente?")) return;
+    const rooms = current.rooms.filter(r => r.id !== roomId);
+    updateCurrent({ rooms });
+    if (editingRoom === roomId) setEditingRoom(null);
+  };
+
   const addRoom = (type: string) => {
     if (!current) return;
-    const newRoom: Room = { id: Math.random().toString(36).substr(2, 9), type, description: '', photos: [], videos: [], condition: 'Bom' };
+    const newRoom: Room = { 
+      id: Math.random().toString(36).substr(2, 9), 
+      type, 
+      description: '', 
+      photos: [], 
+      videos: [], 
+      audios: [],
+      condition: 'Bom',
+      reparoStatus: current.subtipoConstatacao === 'Reparos' ? 'Não Executado' : undefined
+    };
     updateCurrent({ rooms: [...current.rooms, newRoom] });
     setEditingRoom(newRoom.id);
+  };
+
+  const handleSaveDraft = () => {
+    setView('list');
+    setCurrent(null);
+  };
+
+  const handleCompleteInspection = () => {
+    if (!current) return;
+    updateCurrent({ status: 'completed', date: new Date().toISOString() });
+    setView('report');
   };
 
   const handleManualRoomAnalysis = async (roomId: string) => {
@@ -166,11 +196,21 @@ const App: React.FC = () => {
     }
   };
 
-  const confirmNewInspection = (type: Inspection['type']) => {
+  const confirmNewInspection = (type: Inspection['type'], subtipo?: 'Padrão' | 'Reparos') => {
     const newIns: Inspection = {
       id: 'VST-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
-      clientName: '', tenantName: '', inspectorName: DEFAULT_INSPECTOR,
-      type, address: '', date: new Date().toISOString(), rooms: [], status: 'draft', isSynced: false
+      clientName: '', 
+      tenantName: '', 
+      tenantNames: [''],
+      inspectorName: DEFAULT_INSPECTOR,
+      type, 
+      subtipoConstatacao: subtipo,
+      address: '', 
+      date: new Date().toISOString(), 
+      rooms: [], 
+      status: 'draft', 
+      isSynced: false,
+      observacoesGerais: ''
     };
     setCurrent(newIns);
     saveToGlobalList(newIns);
@@ -209,6 +249,20 @@ const App: React.FC = () => {
         setter({ data: result.includes(',') ? result.split(',')[1] : result, size: file.size });
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleTranscription = (text: string, destination: 'general' | 'room' | 'comparison') => {
+    if (!current) return;
+    if (destination === 'general') {
+      updateCurrent({ observacoesGerais: (current.observacoesGerais || '') + '\n' + text });
+    } else if (destination === 'room' && editingRoom) {
+      const room = current.rooms.find(r => r.id === editingRoom);
+      if (room) {
+        updateRoom(editingRoom, { description: (room.description + '\n' + text).trim() });
+      }
+    } else if (destination === 'comparison') {
+      setManualComparisonObs(prev => (prev + '\n' + text).trim());
     }
   };
 
@@ -267,11 +321,23 @@ const App: React.FC = () => {
             <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 text-center">
               <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8">Novo Relatório</h2>
               <div className="grid gap-3">
-                {['Entrada', 'Saída', 'Comparação'].map(type => (
-                  <button key={type} onClick={() => confirmNewInspection(type as any)} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                    <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Vistoria de {type}</span>
+                <button onClick={() => confirmNewInspection('Entrada')} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                  <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Vistoria de Entrada</span>
+                </button>
+                <button onClick={() => confirmNewInspection('Saída')} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                  <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Vistoria de Saída</span>
+                </button>
+                <div className="space-y-2">
+                  <button onClick={() => confirmNewInspection('Constatação', 'Padrão')} className="w-full p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                    <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Constatação Padrão</span>
                   </button>
-                ))}
+                  <button onClick={() => confirmNewInspection('Constatação', 'Reparos')} className="w-full p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                    <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Constatação de Reparos</span>
+                  </button>
+                </div>
+                <button onClick={() => confirmNewInspection('Comparação')} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                  <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Comparativo IA</span>
+                </button>
               </div>
               <button onClick={() => setView('list')} className="mt-8 text-[10px] font-black text-slate-300 uppercase tracking-widest">Voltar</button>
             </div>
@@ -293,7 +359,32 @@ const App: React.FC = () => {
                  </div>
                  <div className="space-y-4 pt-6 border-t">
                     <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" placeholder="Locador / Proprietário" value={current.clientName} onChange={(e) => updateCurrent({ clientName: e.target.value })} />
-                    <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" placeholder="Locatário" value={current.tenantName} onChange={(e) => updateCurrent({ tenantName: e.target.value })} />
+                    <div className="space-y-2">
+                       <label className="text-[9px] font-black uppercase text-slate-400 px-2">Locatários / Proponentes</label>
+                       {(current.tenantNames || [current.tenantName]).map((name, idx) => (
+                         <div key={idx} className="flex gap-2">
+                           <input 
+                             className="flex-1 bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" 
+                             placeholder={`Locatário ${idx + 1}`} 
+                             value={name} 
+                             onChange={(e) => {
+                               const names = [...(current.tenantNames || [current.tenantName])];
+                               names[idx] = e.target.value;
+                               updateCurrent({ tenantNames: names, tenantName: names[0] });
+                             }} 
+                           />
+                           {idx > 0 && (
+                             <button onClick={() => {
+                               const names = (current.tenantNames || [current.tenantName]).filter((_, i) => i !== idx);
+                               updateCurrent({ tenantNames: names, tenantName: names[0] });
+                             }} className="p-4 text-red-500">
+                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                             </button>
+                           )}
+                         </div>
+                       ))}
+                       <button onClick={() => updateCurrent({ tenantNames: [...(current.tenantNames || [current.tenantName]), ''] })} className="text-[9px] font-black text-red-600 uppercase px-2">+ Adicionar Locatário</button>
+                    </div>
                     <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" placeholder="Endereço Completo" value={current.address} onChange={(e) => updateCurrent({ address: e.target.value })} />
                     <textarea className="w-full bg-slate-50 p-6 rounded-[2rem] border border-slate-100 text-xs h-36" placeholder="Notas do perito para foco da análise..." value={manualComparisonObs} onChange={(e) => setManualComparisonObs(e.target.value)} />
                  </div>
@@ -312,7 +403,36 @@ const App: React.FC = () => {
               <input className="w-full text-2xl font-black border-none focus:ring-0 p-0 uppercase tracking-tighter mb-8 bg-transparent" placeholder="Endereço do Imóvel" value={current.address} onChange={(e) => updateCurrent({ address: e.target.value })} />
               <div className="grid grid-cols-2 gap-6">
                 <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border-none" placeholder="Locador" value={current.clientName} onChange={(e) => updateCurrent({ clientName: e.target.value })} />
-                <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border-none" placeholder="Locatário" value={current.tenantName} onChange={(e) => updateCurrent({ tenantName: e.target.value })} />
+                <div className="space-y-2">
+                  {(current.tenantNames || [current.tenantName]).map((name, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <input 
+                        className="flex-1 bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border-none" 
+                        placeholder={`Locatário ${idx + 1}`} 
+                        value={name} 
+                        onChange={(e) => {
+                          const names = [...(current.tenantNames || [current.tenantName])];
+                          names[idx] = e.target.value;
+                          updateCurrent({ tenantNames: names, tenantName: names[0] });
+                        }} 
+                      />
+                      {idx > 0 && (
+                        <button onClick={() => {
+                          const names = (current.tenantNames || [current.tenantName]).filter((_, i) => i !== idx);
+                          updateCurrent({ tenantNames: names, tenantName: names[0] });
+                        }} className="p-4 text-red-500">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={() => updateCurrent({ tenantNames: [...(current.tenantNames || [current.tenantName]), ''] })} className="text-[9px] font-black text-red-600 uppercase px-2">+ Adicionar Locatário</button>
+                </div>
+              </div>
+              <div className="mt-6 pt-6 border-t border-slate-50">
+                <label className="text-[9px] font-black uppercase text-slate-400 px-2 block mb-2">Observações Gerais</label>
+                <VoiceTranscription settings={settings} onTranscriptionComplete={handleTranscription} mode="general" />
+                <textarea className="w-full bg-slate-50 p-6 rounded-[2rem] border border-slate-100 text-xs h-32 mt-2" placeholder="Observações gerais do laudo..." value={current.observacoesGerais || ''} onChange={(e) => updateCurrent({ observacoesGerais: e.target.value })} />
               </div>
             </div>
 
@@ -334,14 +454,48 @@ const App: React.FC = () => {
                       </div>
                       <div>
                         <h4 className="font-black text-slate-800 uppercase text-xs">{room.customName || room.type}</h4>
-                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{room.photos.length} Fotos • {room.condition}</span>
+                        <div className="flex gap-2 items-center">
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{room.photos.length} Fotos • {room.condition}</span>
+                          {current.subtipoConstatacao === 'Reparos' && (
+                            <span className={`text-[7px] font-black px-1.5 py-0.5 rounded uppercase ${room.reparoStatus === 'Concluído' ? 'bg-emerald-100 text-emerald-700' : room.reparoStatus === 'Parcial' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                              {room.reparoStatus}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    {processingRoomId === room.id ? <span className="text-[9px] font-black text-red-600 animate-pulse">Analisando...</span> : <svg className={`w-4 h-4 text-slate-300 transition-all ${editingRoom === room.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>}
+                    <div className="flex items-center gap-4">
+                      {processingRoomId === room.id ? <span className="text-[9px] font-black text-red-600 animate-pulse">Analisando...</span> : <svg className={`w-4 h-4 text-slate-300 transition-all ${editingRoom === room.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>}
+                      <button onClick={(e) => deleteRoom(room.id, e)} className="p-2 text-slate-300 hover:text-red-600 transition-colors">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
                   </div>
 
                   {editingRoom === room.id && (
                     <div className="p-8 border-t border-slate-50 space-y-8 bg-slate-50/10">
+                      {current.subtipoConstatacao === 'Reparos' && (
+                        <div className="bg-white p-6 rounded-3xl border border-slate-100 space-y-4 shadow-sm">
+                          <label className="text-[10px] font-black uppercase text-slate-400 block">Status do Reparo</label>
+                          <div className="flex gap-2">
+                            {(['Concluído', 'Parcial', 'Não Executado'] as const).map(status => (
+                              <button 
+                                key={status} 
+                                onClick={() => updateRoom(room.id, { reparoStatus: status })}
+                                className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${room.reparoStatus === status ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                              >
+                                {status}
+                              </button>
+                            ))}
+                          </div>
+                          <textarea 
+                            className="w-full bg-slate-50 p-4 rounded-2xl text-xs border border-slate-100 h-24" 
+                            placeholder="Descreva o reparo solicitado/identificado..." 
+                            value={room.reparoDescricao || ''} 
+                            onChange={(e) => updateRoom(room.id, { reparoDescricao: e.target.value })} 
+                          />
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-6">
                         <input className="w-full bg-white p-4 rounded-2xl text-xs font-bold border border-slate-100" placeholder="Nome do Ambiente" value={room.customName || ''} onChange={(e) => updateRoom(room.id, { customName: e.target.value })} />
                         <div className="flex gap-1.5 p-1 bg-white rounded-2xl border border-slate-100">
@@ -353,7 +507,11 @@ const App: React.FC = () => {
 
                       <div className="grid grid-cols-2 gap-6">
                         <PhotoUploader onPhotosAdded={(newPhotos) => updateRoom(room.id, { photos: [...room.photos, ...newPhotos] })} />
-                        <VideoUploader onVideosAdded={(newVideos) => updateRoom(room.id, { videos: [...room.videos, ...newVideos] })} />
+                        <VideoUploader 
+                          videos={room.videos}
+                          onVideosAdded={(newVideos) => updateRoom(room.id, { videos: [...room.videos, ...newVideos] })} 
+                          onRemoveVideo={(videoId) => updateRoom(room.id, { videos: room.videos.filter(v => v.id !== videoId) })}
+                        />
                       </div>
 
                       {/* Grade de Fotos com Edição IA e Tags */}
@@ -371,7 +529,7 @@ const App: React.FC = () => {
                                         title="Edição Mágica David Oliveira"
                                       >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.183.394l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394l-1.93-.386a6 6 0 01-3.86-.517l-.318-.158a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 00-3.86.517L6.05 15.21a2 2 0 00-1.183.394l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394l-1.93-.386a6 6 0 01-3.86-.517l-.318-.158a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394" />
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 3l.867 2.6A1 1 0 0014.816 6.3l2.6.867a1 1 0 010 1.866l-2.6.867a1 1 0 00-.949.633L13 13.134l-.867-2.6a1 1 0 00-.949-.633l-2.6-.867a1 1 0 010-1.866l2.6-.867a1 1 0 00.949-.633L13 3z" />
                                         </svg>
                                       </button>
@@ -429,9 +587,65 @@ const App: React.FC = () => {
                         </div>
                       )}
 
+                      {room.videos.length > 0 && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                              Vídeos salvos
+                            </p>
+                            <span className="text-[9px] font-bold text-slate-400">
+                              {room.videos.length} vídeo(s)
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {room.videos.map((video, index) => (
+                              <div
+                                key={video.id}
+                                className="bg-white border border-slate-100 rounded-[1.5rem] overflow-hidden shadow-sm"
+                              >
+                                <video
+                                  src={video.data}
+                                  controls
+                                  preload="metadata"
+                                  className="w-full h-56 object-cover bg-slate-900"
+                                />
+
+                                <div className="p-4 flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase text-slate-700 truncate">
+                                      {((video as any).name) || ((video as any).fileName) || `Vídeo ${index + 1}`}
+                                    </p>
+                                    <p className="text-[9px] text-slate-400">
+                                      {((video as any).duration ? `${Math.round((video as any).duration)}s` : 'Sem duração')}
+                                      {((video as any).size ? ` • ${Math.round((((video as any).size / 1024 / 1024) * 10)) / 10} MB` : '')}
+                                    </p>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      updateRoom(room.id, {
+                                        videos: room.videos.filter(v => v.id !== video.id),
+                                      })
+                                    }
+                                    className="p-2 bg-red-50 text-red-600 rounded-full hover:bg-red-600 hover:text-white transition-all"
+                                    title="Excluir vídeo"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="space-y-4">
                         <div className="flex gap-3 bg-slate-900 p-2.5 rounded-2xl shadow-xl items-center">
-                           <VoiceTranscription settings={settings} onTranscriptionComplete={(text) => updateRoom(room.id, { description: (room.description + '\n' + text).trim() })} />
+                           <VoiceTranscription settings={settings} onTranscriptionComplete={(text, dest) => handleTranscription(text, dest)} mode="room" />
                            <button onClick={() => handleManualRoomAnalysis(room.id)} disabled={processingRoomId === room.id} className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase transition-all hover:bg-red-700">Análise IA David Oliveira</button>
                         </div>
                         <textarea className="w-full bg-white p-6 rounded-[2rem] border border-slate-100 text-xs h-64 leading-relaxed font-medium outline-none focus:ring-4 focus:ring-red-50 transition-all" placeholder="A IA David Oliveira gerará o laudo técnico..." value={room.description} onChange={(e) => updateRoom(room.id, { description: e.target.value })} />
@@ -444,8 +658,19 @@ const App: React.FC = () => {
 
             <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent no-print pointer-events-none z-40">
               <div className="max-w-md mx-auto grid grid-cols-2 gap-4 pointer-events-auto">
-                <button onClick={() => setView('list')} className="bg-slate-200 text-slate-700 py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">Salvar</button>
-                <button onClick={() => { updateCurrent({ status: 'completed', date: new Date().toISOString() }); setView('report'); }} className="bg-slate-900 text-white py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-2xl active:scale-95 transition-all">Gerar Laudo</button>
+                <button
+                  onClick={handleSaveDraft}
+                  className="bg-slate-200 text-slate-700 py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all"
+                >
+                  Salvar Rascunho
+                </button>
+
+                <button
+                  onClick={handleCompleteInspection}
+                  className="bg-slate-900 text-white py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-2xl active:scale-95 transition-all"
+                >
+                  Gerar Laudo
+                </button>
               </div>
             </div>
           </div>
