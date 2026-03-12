@@ -28,6 +28,7 @@ const App: React.FC = () => {
   const [current, setCurrent] = useState<Inspection | null>(null);
   const [view, setView] = useState<'list' | 'editor' | 'report' | 'comparison' | 'type_selector' | 'settings'>('list');
   const [isBusy, setIsBusy] = useState(false);
+  const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [editingRoom, setEditingRoom] = useState<string | null>(null);
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -56,8 +57,31 @@ const App: React.FC = () => {
     if (isLoaded) {
       localforage.setItem('qdez_rascunhos', inspections);
       localforage.setItem('qdez_settings', settings);
+      setLastSaved(new Date().toLocaleTimeString());
     }
   }, [inspections, settings, isLoaded]);
+
+  // Persistência do estado atual para evitar perda em refresh
+  useEffect(() => {
+    if (isLoaded) {
+      if (current) {
+        localforage.setItem('qdez_current_editing', current);
+      } else {
+        localforage.removeItem('qdez_current_editing');
+      }
+    }
+  }, [current, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      localforage.getItem<Inspection>('qdez_current_editing').then(stored => {
+        if (stored && !current) {
+          setCurrent(stored);
+          setView(stored.type === 'Comparação' ? 'comparison' : 'editor');
+        }
+      });
+    }
+  }, [isLoaded]);
 
   const saveToGlobalList = (updatedIns: Inspection) => {
     setInspections(prev => {
@@ -160,10 +184,11 @@ const App: React.FC = () => {
       });
 
       if (analysis.evidenciasDanos.length > 0) {
-        formattedText += `\nAVARIAS E OBSERVACÕES:\n`;
+        formattedText += `\nAVARIAS E OBSERVAÇÕES:\n`;
         analysis.evidenciasDanos.forEach((dano: any) => {
           const ts = dano.timestamp ? ` [Vídeo: ${dano.timestamp}]` : "";
-          formattedText += `- ${dano.local}: ${dano.descricao}${ts} (Gravidade: ${dano.gravidade})\n`;
+          const sugestao = dano.sugestaoReparo ? `\n  ↳ Sugestão: ${dano.sugestaoReparo}` : "";
+          formattedText += `- ${dano.local}: ${dano.descricao}${ts} (Gravidade: ${dano.gravidade})${sugestao}\n`;
         });
       }
 
@@ -299,6 +324,9 @@ const App: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex gap-2 items-center mb-1">
                         <span className="text-[9px] font-black uppercase text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{ins.type}</span>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${ins.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                          {ins.status === 'completed' ? 'Finalizado' : 'Rascunho'}
+                        </span>
                         <span className="text-[9px] font-bold text-slate-400">#{ins.id}</span>
                         {ins.isSynced && <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase">Cloud ✓</span>}
                       </div>
@@ -353,7 +381,10 @@ const App: React.FC = () => {
         {view === 'comparison' && current && (
           <div className="max-w-xl mx-auto space-y-6 pt-10 pb-40 animate-in fade-in duration-500">
              <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100">
-               <h2 className="text-2xl font-black mb-10 uppercase tracking-tighter">Comparativo IA</h2>
+               <div className="flex justify-between items-center mb-10">
+                 <h2 className="text-2xl font-black uppercase tracking-tighter">Comparativo IA</h2>
+                 <button onClick={() => setView('list')} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-600 transition-colors">Voltar</button>
+               </div>
                <div className="space-y-6">
                  <div className={`p-8 rounded-[2rem] border-2 border-dashed ${pdfEntry ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'}`}>
                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-4">Laudo de ENTRADA (PDF)</label>
@@ -397,6 +428,9 @@ const App: React.FC = () => {
                </div>
                <button onClick={handleRunComparison} disabled={isBusy || !pdfEntry || !pdfExit} className="w-full mt-10 bg-slate-900 text-white py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-2xl disabled:opacity-50">
                  {isBusy ? "David Oliveira Periciando..." : "Gerar Perícia David Oliveira"}
+               </button>
+               <button onClick={handleSaveDraft} className="w-full mt-4 bg-slate-100 text-slate-500 py-4 rounded-[2rem] font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all">
+                 Salvar Rascunho
                </button>
              </div>
           </div>

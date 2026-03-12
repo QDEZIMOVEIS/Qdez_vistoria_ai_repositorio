@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { AppSettings } from "../types";
 
 const stripDataUrl = (value: string) => {
@@ -156,21 +156,22 @@ export const analyzeRoomMediaAI = async (
 
   const parts = [
     {
-      text: `Você é David Oliveira (Creci 84926-F), Perito Vistoriador.
-Analise as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
+      text: `Você é David Oliveira (Creci 84926-F), Perito Vistoriador Imobiliário Sênior.
+Analise detalhadamente as mídias (fotos e vídeos) do ambiente "${roomType}" para um laudo de "${inspectionType}".
 
-FOCO DA ANÁLISE:
-1. ESTADO DE CONSERVAÇÃO: Descreva de forma concisa o estado geral e de itens específicos.
-2. IDENTIFICAÇÃO DE DANOS: Liste avarias, sinais de infiltração, fissuras ou desgastes.
-3. TIMESTAMPS PRECISOS: ${hasVideo ? "Para cada dano ou evidência em vídeo, indique o timestamp exato (MM:SS)." : "N/A"}
+SUA MISSÃO:
+1. ESTADO DE CONSERVAÇÃO: Avalie o estado de conservação de cada componente visível (piso, paredes, teto, esquadrias, elétrica, hidráulica). Use termos técnicos precisos.
+2. IDENTIFICAÇÃO DE DANOS: Identifique qualquer anomalia, por menor que seja (fissuras, manchas de umidade, riscos em piso, pintura descascando, peças soltas, etc.).
+3. TIMESTAMPS DE VÍDEO: Para cada dano identificado em vídeo, você DEVE fornecer o timestamp exato (MM:SS). Se houver mais de um vídeo, especifique qual (ex: "Vídeo 1 - 00:15").
+4. DETALHAMENTO TÉCNICO: Descreva materiais e acabamentos identificados.
 
-REGRAS DE RESPOSTA:
-- Seja extremamente objetivo e técnico.
-- Use termos profissionais (ex: "pintura látex", "esquadrias", "desgaste abrasivo").
-- Evite textos longos; prefira descrições diretas.
-- Retorne APENAS o JSON solicitado.`,
+REGRAS CRÍTICAS:
+- Responda APENAS em JSON conforme o esquema fornecido.
+- Seja extremamente rigoroso e técnico. Não use adjetivos genéricos sem fundamentação.
+- Se um item estiver em bom estado, descreva-o como tal, mas cite o material (ex: "Piso cerâmico em bom estado de conservação").
+- Para danos, descreva a provável causa se for evidente (ex: "Infiltração ascendente", "Impacto mecânico").`,
     },
-    ...usableItems.map((item) => ({
+    ...usableItems.map((item, index) => ({
       inlineData: {
         data: stripDataUrl(item.data),
         mimeType: item.mimeType,
@@ -185,38 +186,53 @@ REGRAS DE RESPOSTA:
       config: {
         systemInstruction: getSystemInstruction(settings, "analysis"),
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            descricaoGeral: { type: Type.STRING },
+            descricaoGeral: { 
+              type: Type.STRING, 
+              description: "Resumo técnico do ambiente, citando dimensões aparentes, iluminação e ventilação." 
+            },
             estadoConservacao: {
               type: Type.STRING,
               enum: ["Ótimo", "Bom", "Regular", "Ruim"],
+              description: "Classificação geral do ambiente."
             },
             itensIdentificados: {
               type: Type.ARRAY,
+              description: "Lista de todos os componentes identificados no ambiente.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  item: { type: Type.STRING },
-                  estado: { type: Type.STRING },
-                  detalhes: { type: Type.STRING },
+                  item: { type: Type.STRING, description: "Nome do componente (ex: Porta, Janela, Piso)." },
+                  estado: { type: Type.STRING, description: "Estado de conservação (Novo, Bom, Desgastado, etc)." },
+                  detalhes: { type: Type.STRING, description: "Descrição técnica do material e acabamento." },
                 },
                 required: ["item", "estado", "detalhes"],
               },
             },
             evidenciasDanos: {
               type: Type.ARRAY,
+              description: "Lista detalhada de todas as avarias e danos encontrados.",
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  local: { type: Type.STRING },
-                  descricao: { type: Type.STRING },
-                  timestamp: { type: Type.STRING, description: "MM:SS onde o dano aparece no vídeo, se aplicável" },
+                  local: { type: Type.STRING, description: "Localização exata do dano no ambiente." },
+                  descricao: { type: Type.STRING, description: "Descrição técnica detalhada da avaria." },
+                  timestamp: { 
+                    type: Type.STRING, 
+                    description: "Timestamp MM:SS e identificação do vídeo (ex: 'Vídeo 1 - 00:12') se o dano aparecer em vídeo." 
+                  },
                   gravidade: {
                     type: Type.STRING,
                     enum: ["Baixa", "Média", "Alta"],
+                    description: "Nível de urgência para reparo."
                   },
+                  sugestaoReparo: {
+                    type: Type.STRING,
+                    description: "Sugestão técnica de como sanar o dano."
+                  }
                 },
                 required: ["local", "descricao", "gravidade"],
               },

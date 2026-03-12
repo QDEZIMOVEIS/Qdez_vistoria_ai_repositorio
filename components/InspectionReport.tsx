@@ -13,6 +13,9 @@ const normalizeImageSrc = (value?: string) => {
 };
 
 const InspectionReport: React.FC<InspectionReportProps> = ({ inspection }) => {
+  console.log('Rendering report for inspection:', inspection.id, 'Rooms:', inspection.rooms.length);
+  inspection.rooms.forEach(r => console.log(`Room ${r.type}: ${r.photos.length} photos`));
+
   const renderPhotoGrid = (room: Room) => {
     if (inspection.type === 'Comparação') {
       const tags = Array.from(new Set(room.photos.map((p) => p.label).filter(Boolean)));
