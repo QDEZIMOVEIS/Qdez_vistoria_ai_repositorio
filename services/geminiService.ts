@@ -136,7 +136,7 @@ export const analyzeRoomMediaAI = async (
     throw new Error("Chave de API do Gemini não encontrada.");
   }
   const ai = new GoogleGenAI({ apiKey });
-  const modelName = 'gemini-3-flash-preview';
+  const modelName = 'gemini-3.1-pro-preview';
 
   if (!mediaItems || mediaItems.length === 0) {
     throw new Error('Nenhuma mídia foi enviada para análise.');
@@ -172,7 +172,13 @@ export const analyzeRoomMediaAI = async (
   // limita a carga para evitar estouro e travamento
   const limitedMedia = mediaItems.slice(0, 5);
 
-  const parts = [
+  const parts: any[] = [
+    ...limitedMedia.map((item) => ({
+      inlineData: {
+        data: normalizeBase64(item.data),
+        mimeType: item.mimeType,
+      },
+    })),
     {
       text: `
 Analise minuciosamente as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
@@ -186,15 +192,9 @@ REQUISITOS DO LAUDO:
 5. MARCAS E MODELOS: Identifique marcas de metais, louças e eletros visíveis.
 6. PONTUAÇÃO: Dê uma nota de 0 a 10 para o ambiente.
 
-Retorne APENAS o JSON conforme o esquema.
+Retorne APENAS o JSON conforme o esquema solicitado.
       `.trim(),
     },
-    ...limitedMedia.map((item) => ({
-      inlineData: {
-        data: normalizeBase64(item.data),
-        mimeType: item.mimeType,
-      },
-    })),
   ];
 
   try {
@@ -316,12 +316,9 @@ Retorne APENAS o JSON conforme o esquema.
       throw new Error('O serviço da IA está sobrecarregado no momento. Tente novamente.');
     }
 
-    // Se for um erro desconhecido, tentamos mostrar um pouco mais de contexto se for útil
-    if (message.length > 2 && message.length < 150) {
-      throw new Error(`Erro na IA: ${message}`);
-    }
-
-    throw new Error('Não foi possível concluir a análise deste ambiente com IA.');
+    // Se for um erro desconhecido, mostramos a mensagem original para diagnóstico
+    const errorDetail = message || (error instanceof Error ? error.stack : JSON.stringify(error));
+    throw new Error(`Detalhe técnico: ${errorDetail}`);
   }
 };
 

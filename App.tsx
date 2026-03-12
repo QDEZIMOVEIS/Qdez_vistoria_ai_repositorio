@@ -730,9 +730,9 @@ const App: React.FC = () => {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                               </svg>
                             </div>
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <p className="text-[10px] text-red-600 font-black uppercase tracking-widest">Erro na Análise Técnica</p>
-                              <p className="text-[9px] text-red-500 font-bold mt-0.5 mb-1.5">{analysisError}</p>
+                              <p className="text-[9px] text-red-500 font-bold mt-0.5 mb-1.5 break-words max-h-32 overflow-y-auto custom-scrollbar">{analysisError}</p>
                               <button 
                                 onClick={() => handleManualRoomAnalysis(room.id)}
                                 className="text-[8px] font-black text-red-600 hover:text-red-700 underline uppercase tracking-tighter"
