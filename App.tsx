@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [isBusy, setIsBusy] = useState(false);
   const [editingRoom, setEditingRoom] = useState<string | null>(null);
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // Estados para edição de imagem via IA
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
@@ -141,6 +142,7 @@ const App: React.FC = () => {
     }
 
     setProcessingRoomId(roomId);
+    setAnalysisError(null);
     try {
       const mediaItems = [
         ...photos.map(p => ({ data: p.data, mimeType: p.mimeType })),
@@ -169,9 +171,9 @@ const App: React.FC = () => {
         description: formattedText.trim(),
         condition: analysis.estadoConservacao
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro na análise técnica:", err);
-      // Silencioso se for automático para não interromper o fluxo, ou logar erro
+      setAnalysisError(err.message || "Erro desconhecido na análise.");
     } finally {
       setProcessingRoomId(null);
     }
@@ -661,8 +663,29 @@ const App: React.FC = () => {
                       <div className="space-y-4">
                         <div className="flex gap-3 bg-slate-900 p-2.5 rounded-2xl shadow-xl items-center">
                            <VoiceTranscription settings={settings} onTranscriptionComplete={(text, dest) => handleTranscription(text, dest)} mode="room" />
-                           <button onClick={() => handleManualRoomAnalysis(room.id)} disabled={processingRoomId === room.id} className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase transition-all hover:bg-red-700">Análise IA David Oliveira</button>
+                           <button 
+                             onClick={() => handleManualRoomAnalysis(room.id)} 
+                             disabled={processingRoomId === room.id} 
+                             className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${processingRoomId === room.id ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
+                           >
+                             {processingRoomId === room.id ? 'Analisando...' : 'Análise IA David Oliveira'}
+                           </button>
                         </div>
+                        
+                        {analysisError && processingRoomId === room.id && (
+                          <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                            <div className="w-8 h-8 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                              <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-[10px] text-red-600 font-black uppercase tracking-widest">Erro na Análise Técnica</p>
+                              <p className="text-[9px] text-red-500 font-bold mt-0.5">{analysisError}</p>
+                            </div>
+                          </div>
+                        )}
+
                         <textarea className="w-full bg-white p-6 rounded-[2rem] border border-slate-100 text-xs h-64 leading-relaxed font-medium outline-none focus:ring-4 focus:ring-red-50 transition-all" placeholder="A IA David Oliveira gerará o laudo técnico..." value={room.description} onChange={(e) => updateRoom(room.id, { description: e.target.value })} />
                       </div>
                     </div>

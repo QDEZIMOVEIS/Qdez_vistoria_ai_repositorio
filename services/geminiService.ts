@@ -74,7 +74,11 @@ export const editImageAI = async (
   prompt: string,
   settings: AppSettings
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave de API do Gemini não encontrada.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
   const modelName = "gemini-2.5-flash-image";
   const base64Data = stripDataUrl(imageData);
 
@@ -126,7 +130,12 @@ export const analyzeRoomMediaAI = async (
   mediaItems: { data: string; mimeType: string }[],
   settings: AppSettings
 ): Promise<any> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave de API do Gemini não configurada. Verifique as configurações.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const modelName = "gemini-3-flash-preview";
 
   // Gerenciamento de Payload: Limite de ~18MB para segurança (Base64 aumenta o tamanho)
@@ -243,7 +252,11 @@ export const performComparisonAI = async (
   settings: AppSettings,
   manualObs?: string
 ): Promise<any> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave de API do Gemini não encontrada.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
   const modelName = "gemini-3-flash-preview";
 
   const entrySize = estimateBase64SizeMB(entryPdf);
@@ -319,7 +332,9 @@ export const transcribeAudio = async (
   settings: AppSettings,
   mimeType: string = "audio/webm"
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return "";
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
     const response = await ai.models.generateContent({

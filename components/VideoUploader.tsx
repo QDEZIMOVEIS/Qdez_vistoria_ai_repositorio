@@ -49,10 +49,8 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideosAdded, videos = [
     const oversized = Array.from(files as FileList).some((f: File) => f.size > MAX_VIDEO_SIZE);
     
     if (oversized) {
-      if (!confirm("Alguns vídeos são grandes (>15MB) e podem causar lentidão ou erro na análise. Deseja continuar?")) {
-        e.target.value = '';
-        return;
-      }
+      // Apenas logar ou mostrar aviso visual, mas não bloquear com confirm() em iframe
+      console.warn("Alguns vídeos são grandes (>15MB) e podem causar lentidão.");
     }
 
     setIsUploading(true);
