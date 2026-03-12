@@ -57,15 +57,16 @@ Modifique a imagem conforme o comando do usuário para fins documentais.
 Mantenha o realismo e a coerência visual.`;
   }
 
-  return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional.
-Sua tarefa é redigir uma descrição técnica de vistoria com base em fotos e vídeos.
-REGRAS:
-- Escreva em português do Brasil.
-- Linguagem formal, objetiva e útil para laudo.
-- Não invente informações.
-- Se houver baixa certeza, escreva "Necessita validação humana".
-- Descreva o cômodo, os itens identificados, o estado de conservação e danos observáveis.
-- Use frases curtas e técnicas.
+  return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador Imobiliário Sênior e Auditor de Qualidade.
+Sua tarefa é gerar um laudo de vistoria de nível "World Class", equivalente aos melhores softwares do mercado (VistoHouse, MSYS).
+
+DIRETRIZES DE ELITE:
+- TERMINOLOGIA: Use termos técnicos rigorosos (ex: "Eflorescência", "Desplacamento", "Oxidação", "Fissura capilar").
+- MATERIAIS: Identifique marcas e modelos se visíveis (ex: "Metais Deca", "Louças Incepa", "Ar-condicionado Split Samsung").
+- QUANTITATIVO: Conte elementos (ex: "04 tomadas 2P+T", "02 pontos de iluminação").
+- FUNCIONALIDADE: Infira o funcionamento com base no estado visual (ex: "Esquadria com vedação íntegra", "Sifão sem sinais de vazamento").
+- PONTUAÇÃO: Atribua uma nota de 0 a 10 para o estado geral do ambiente.
+- SEGURANÇA: Destaque itens que afetam a segurança ou habitabilidade imediata.
 - ${detailInstruction}`;
 };
 
@@ -170,10 +171,18 @@ export const analyzeRoomMediaAI = async (
   const parts = [
     {
       text: `
-Analise as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
-Retorne SOMENTE JSON válido.
-Se não tiver certeza, use "Necessita validação humana".
-Seja técnico, objetivo e preciso.
+Analise minuciosamente as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
+Sua análise deve superar o padrão de mercado (VistoHouse, MSYS, BeSoft).
+
+REQUISITOS DO LAUDO:
+1. DESCRITIVO TÉCNICO: Detalhe acabamentos (piso, parede, teto, rodapés).
+2. INVENTÁRIO QUANTITATIVO: Conte tomadas, interruptores, lâmpadas e acessórios.
+3. ESTADO DE CONSERVAÇÃO: Avalie cada item com rigor pericial.
+4. DIAGNÓSTICO DE AVARIAS: Identifique danos, categorize (Estético/Funcional/Estrutural), aponte a causa provável e sugira o reparo.
+5. MARCAS E MODELOS: Identifique marcas de metais, louças e eletros visíveis.
+6. PONTUAÇÃO: Dê uma nota de 0 a 10 para o ambiente.
+
+Retorne APENAS o JSON conforme o esquema.
       `.trim(),
     },
     ...limitedMedia.map((item) => ({
@@ -191,13 +200,27 @@ Seja técnico, objetivo e preciso.
       config: {
         systemInstruction: getSystemInstruction(settings, 'analysis'),
         responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             descricaoGeral: { type: Type.STRING },
+            notaGeral: { type: Type.NUMBER, description: "Nota de 0 a 10 para o estado do ambiente" },
             estadoConservacao: {
               type: Type.STRING,
               enum: ['Ótimo', 'Bom', 'Regular', 'Ruim'],
+            },
+            itensQuantitativos: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  item: { type: Type.STRING },
+                  quantidade: { type: Type.NUMBER },
+                  marca: { type: Type.STRING, description: "Marca identificada ou 'Não identificada'" }
+                },
+                required: ['item', 'quantidade']
+              }
             },
             itensIdentificados: {
               type: Type.ARRAY,
@@ -205,6 +228,7 @@ Seja técnico, objetivo e preciso.
                 type: Type.OBJECT,
                 properties: {
                   item: { type: Type.STRING },
+                  material: { type: Type.STRING },
                   estado: { type: Type.STRING },
                   detalhes: { type: Type.STRING },
                 },
@@ -218,6 +242,13 @@ Seja técnico, objetivo e preciso.
                 properties: {
                   local: { type: Type.STRING },
                   descricao: { type: Type.STRING },
+                  timestamp: { type: Type.STRING },
+                  causaProvavel: { type: Type.STRING },
+                  sugestaoReparo: { type: Type.STRING },
+                  categoria: { 
+                    type: Type.STRING,
+                    enum: ['Estético', 'Funcional', 'Estrutural']
+                  },
                   gravidade: {
                     type: Type.STRING,
                     enum: ['Baixa', 'Média', 'Alta'],
@@ -229,6 +260,8 @@ Seja técnico, objetivo e preciso.
           },
           required: [
             'descricaoGeral',
+            'notaGeral',
+            'itensQuantitativos',
             'estadoConservacao',
             'itensIdentificados',
             'evidenciasDanos',

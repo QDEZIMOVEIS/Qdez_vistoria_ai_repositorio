@@ -175,20 +175,34 @@ const App: React.FC = () => {
 
       const analysis = await analyzeRoomMediaAI(room.type, current.type, mediaItems, settings);
       
-      let formattedText = `AMBIENTE: ${room.customName || room.type}\n\n`;
+      let formattedText = `AMBIENTE: ${room.customName || room.type}\n`;
+      formattedText += `PONTUAÇÃO GERAL: ${analysis.notaGeral || 'N/A'}/10\n\n`;
+      
       formattedText += `DESCRIÇÃO TÉCNICA:\n${analysis.descricaoGeral}\n\n`;
       
+      if (analysis.itensQuantitativos && analysis.itensQuantitativos.length > 0) {
+        formattedText += `INVENTÁRIO QUANTITATIVO:\n`;
+        analysis.itensQuantitativos.forEach((iq: any) => {
+          const marca = iq.marca && iq.marca !== 'Não identificada' ? ` (Marca: ${iq.marca})` : "";
+          formattedText += `- ${iq.quantidade}x ${iq.item}${marca}\n`;
+        });
+        formattedText += `\n`;
+      }
+
       formattedText += `COMPONENTES E CONSERVAÇÃO:\n`;
       analysis.itensIdentificados.forEach((item: any) => {
-        formattedText += `- ${item.item}: ${item.estado}. ${item.detalhes}\n`;
+        const mat = item.material ? ` [${item.material}]` : "";
+        formattedText += `- ${item.item}${mat}: ${item.estado}. ${item.detalhes}\n`;
       });
 
       if (analysis.evidenciasDanos.length > 0) {
         formattedText += `\nAVARIAS E OBSERVAÇÕES:\n`;
         analysis.evidenciasDanos.forEach((dano: any) => {
-          const ts = dano.timestamp ? ` [Vídeo: ${dano.timestamp}]` : "";
-          const sugestao = dano.sugestaoReparo ? `\n  ↳ Sugestão: ${dano.sugestaoReparo}` : "";
-          formattedText += `- ${dano.local}: ${dano.descricao}${ts} (Gravidade: ${dano.gravidade})${sugestao}\n`;
+          const ts = dano.timestamp ? ` [Ref: ${dano.timestamp}]` : "";
+          const cat = dano.categoria ? ` [Cat: ${dano.categoria}]` : "";
+          const causa = dano.causaProvavel ? `\n  ↳ Causa: ${dano.causaProvavel}` : "";
+          const sugestao = dano.sugestaoReparo ? `\n  ↳ Reparo: ${dano.sugestaoReparo}` : "";
+          formattedText += `- ${dano.local}: ${dano.descricao}${ts}${cat} (Gravidade: ${dano.gravidade})${causa}${sugestao}\n`;
         });
       }
 
