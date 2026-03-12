@@ -131,8 +131,12 @@ export const analyzeRoomMediaAI = async (
   mediaItems: { data: string; mimeType: string }[],
   settings: AppSettings
 ): Promise<any> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  const modelName = 'gemini-3-flash-preview';
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Chave de API do Gemini não encontrada.");
+  }
+  const ai = new GoogleGenAI({ apiKey });
+  const modelName = 'gemini-3.1-pro-preview';
 
   if (!mediaItems || mediaItems.length === 0) {
     throw new Error('Nenhuma mídia foi enviada para análise.');
@@ -200,7 +204,6 @@ Retorne APENAS o JSON conforme o esquema.
       config: {
         systemInstruction: getSystemInstruction(settings, 'analysis'),
         responseMimeType: 'application/json',
-        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
@@ -274,13 +277,11 @@ Retorne APENAS o JSON conforme o esquema.
 
     return {
       descricaoGeral: parsed.descricaoGeral || 'Necessita validação humana.',
+      notaGeral: parsed.notaGeral,
       estadoConservacao: parsed.estadoConservacao || 'Bom',
-      itensIdentificados: Array.isArray(parsed.itensIdentificados)
-        ? parsed.itensIdentificados
-        : [],
-      evidenciasDanos: Array.isArray(parsed.evidenciasDanos)
-        ? parsed.evidenciasDanos
-        : [],
+      itensQuantitativos: Array.isArray(parsed.itensQuantitativos) ? parsed.itensQuantitativos : [],
+      itensIdentificados: Array.isArray(parsed.itensIdentificados) ? parsed.itensIdentificados : [],
+      evidenciasDanos: Array.isArray(parsed.evidenciasDanos) ? parsed.evidenciasDanos : [],
     };
   } catch (error: any) {
     console.error('Erro análise IA:', error);

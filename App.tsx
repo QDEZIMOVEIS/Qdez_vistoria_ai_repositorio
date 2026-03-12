@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [editingRoom, setEditingRoom] = useState<string | null>(null);
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [errorRoomId, setErrorRoomId] = useState<string | null>(null);
 
   // Estados para edição de imagem via IA
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
@@ -167,6 +168,7 @@ const App: React.FC = () => {
 
     setProcessingRoomId(roomId);
     setAnalysisError(null);
+    setErrorRoomId(null);
     try {
       const mediaItems = [
         ...photos.map(p => ({ data: p.data, mimeType: p.mimeType })),
@@ -213,6 +215,7 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error("Erro na análise técnica:", err);
       setAnalysisError(err.message || "Erro desconhecido na análise.");
+      setErrorRoomId(roomId);
     } finally {
       setProcessingRoomId(null);
     }
@@ -720,7 +723,7 @@ const App: React.FC = () => {
                            </button>
                         </div>
                         
-                        {analysisError && processingRoomId === room.id && (
+                        {analysisError && errorRoomId === room.id && (
                           <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
                             <div className="w-8 h-8 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
                               <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
