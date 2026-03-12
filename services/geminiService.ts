@@ -1,69 +1,82 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { AppSettings } from "../types";
 
-const getSystemInstruction = (settings: AppSettings, context: 'analysis' | 'comparison' | 'image_edit' | 'repairs' = 'analysis') => {
+const stripDataUrl = (value: string) => {
+  if (!value) return "";
+  return value.includes(",") ? value.split(",")[1] : value;
+};
+
+const estimateBase64SizeMB = (value: string) => {
+  const clean = stripDataUrl(value);
+  return (clean.length * 3) / 4 / 1024 / 1024;
+};
+
+const extractJson = (raw: string) => {
+  const cleaned = (raw || "").replace(/```json/g, "").replace(/```/g, "").trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error("A IA não retornou JSON válido.");
+  }
+};
+
+const getSystemInstruction = (
+  settings: AppSettings,
+  context: "analysis" | "comparison" | "image_edit" = "analysis"
+) => {
   const detailInstruction = {
-    'Conciso': "Seja extremamente breve e direto. Foque apenas no estado geral e danos críticos.",
-    'Normal': "Descreva o estado de conservação de forma equilibrada e técnica.",
-    'Muito Detalhado': "Seja exaustivo. Descreva materiais, texturas, marcas de uso e faça um inventário minucioso."
+    Conciso: "Seja breve, técnico e objetivo. Priorize estado de conservação, danos e itens identificados.",
+    Normal: "Descreva o estado de conservação with equilíbrio técnico e linguagem objetiva.",
+    "Muito Detalhado":
+      "Seja minucioso, mas mantenha objetividade técnica. Cite materiais, acabamento, sinais de uso e danos observáveis.",
   }[settings.detailLevel];
 
-  if (context === 'comparison') {
-    return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador da Qdez Imóveis.
-Sua tarefa é COMPARAR dois laudos (Entrada e Saída) e identificar DIVERGÊNCIAS DOCUMENTAIS.
+  if (context === "comparison") {
+    return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador Imobiliário.
+Sua tarefa é comparar documentalmente dois laudos, ENTRADA e SAÍDA.
 REGRAS:
-- Linguagem formal, clara e objetiva.
-- Registre apenas o que é OBSERVÁVEL.
-- Identifique danos novos ou mudanças no estado de conservação.
-- Apresente divergências, resumo do estado geral, pontos que pioraram, pontos críticos e recomendações.
-- Incorpore as observações do vistoriador na conclusão.
-- Use Google Search para estimar custos de reparo no mercado brasileiro.
+- Escreva em português do Brasil.
+- Seja formal, técnico e objetivo.
+- Registre apenas o que for observável ou inferível do conteúdo dos PDFs.
+- Identifique divergências, danos novos, piora do estado de conservação e itens ausentes.
+- Considere as observações humanas do vistoriador.
+- Use Google Search apenas para referência de custos e fontes.
+- Não invente informações.
 - ${detailInstruction}`;
   }
 
-  if (context === 'repairs') {
-    return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional da Qdez Imóveis.
-Sua tarefa é analisar a CONSTATAÇÃO DE REPAROS.
-REGRAS:
-- Descreva o reparo constatado de forma técnica e objetiva.
-- Informe se o reparo foi concluído, parcial ou não executado com base nas evidências.
-- Gere um texto técnico adequado para laudo de constatação.
-- Se houver baixa confiança, escreva: "Necessita validação humana".`;
+  if (context === "image_edit") {
+    return `Você é um editor de imagens especializado em perícia imobiliária.
+Modifique a imagem conforme o comando do usuário para fins documentais.
+Mantenha o realismo e a coerência visual.`;
   }
 
-  if (context === 'image_edit') {
-    return `Você é um editor de imagens especializado em perícia imobiliária para a Qdez Imóveis. 
-Sua tarefa é modificar a imagem conforme o comando do usuário para fins de documentação técnica. 
-Mantenha o realismo e a precisão técnica. Se o usuário pedir para remover algo, use preenchimento generativo coerente.`;
-  }
-
-  return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional da Qdez Imóveis.
-Sua tarefa é REDIGIR a descrição técnica de uma VISTORIA com linguagem FORMAL e OBJETIVA.
+  return `Você é David Oliveira (Creci 84926-F), Vistoriador Profissional.
+Sua tarefa é redigir uma descrição técnica de vistoria com base em fotos e vídeos.
 REGRAS:
-- Escreva em português do Brasil, tom formal e impessoal.
-- Use frases curtas. Não use adjetivos subjetivos.
-- Não presuma causa. Descreva o fato.
-- Informe material, cor, acabamento e estado.
-- Descreva o cômodo em geral, itens identificados, estado de conservação e eventuais danos.
-- NÃO invente dados. Se não tiver certeza: "Necessita validação humana".
-- Para vídeos, inclua evidências com timestamp quando possível.
+- Escreva em português do Brasil.
+- Linguagem formal, objetiva e útil para laudo.
+- Não invente informações.
+- Se houver baixa certeza, escreva "Necessita validação humana".
+- Descreva o cômodo, os itens identificados, o estado de conservação e danos observáveis.
+- Use frases curtas e técnicas.
 - ${detailInstruction}`;
 };
 
-/**
- * Edita uma imagem com base em um prompt de texto usando Gemini 2.5 Flash Image.
- */
 export const editImageAI = async (
   imageData: string,
   prompt: string,
   settings: AppSettings
 ): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-2.5-flash-image';
-
-  // O payload deve ser limpo (apenas base64, sem o prefixo data:...)
-  const base64Data = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+  const modelName = "gemini-2.5-flash-image";
+  const base64Data = stripDataUrl(imageData);
 
   try {
     const response = await ai.models.generateContent({
@@ -73,7 +86,7 @@ export const editImageAI = async (
           {
             inlineData: {
               data: base64Data,
-              mimeType: 'image/jpeg',
+              mimeType: "image/jpeg",
             },
           },
           {
@@ -82,23 +95,24 @@ export const editImageAI = async (
         ],
       },
       config: {
-        systemInstruction: getSystemInstruction(settings, 'image_edit'),
+        systemInstruction: getSystemInstruction(settings, "image_edit"),
         imageConfig: {
-          aspectRatio: "4:3"
-        }
-      }
+          aspectRatio: "4:3",
+        },
+      },
     });
 
-    // O modelo retorna a imagem editada em um dos parts da resposta
     const candidate = response.candidates?.[0];
-    if (!candidate?.content?.parts) throw new Error("Resposta da IA vazia.");
+    if (!candidate?.content?.parts) {
+      throw new Error("Resposta da IA vazia.");
+    }
 
     for (const part of candidate.content.parts) {
-      if (part.inlineData) {
+      if (part.inlineData?.data) {
         return `data:image/jpeg;base64,${part.inlineData.data}`;
       }
     }
-    
+
     throw new Error("O modelo não retornou uma imagem editada.");
   } catch (error) {
     console.error("Erro na edição de imagem IA:", error);
@@ -107,22 +121,30 @@ export const editImageAI = async (
 };
 
 export const analyzeRoomMediaAI = async (
-  roomType: string, 
-  inspectionType: string, 
-  mediaItems: { data: string, mimeType: string }[],
+  roomType: string,
+  inspectionType: string,
+  mediaItems: { data: string; mimeType: string }[],
   settings: AppSettings
 ): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-3-flash-preview';
+  const modelName = "gemini-3-flash-preview";
+
+  const usableItems = mediaItems.slice(0, 12);
 
   const parts = [
-    { text: `Analise as mídias deste ambiente (${roomType}) para um Laudo de ${inspectionType}. Retorne JSON.` },
-    ...mediaItems.map(item => ({
+    {
+      text: `Analise as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
+Retorne SOMENTE JSON válido.
+A descrição deve ser objetiva, técnica e útil para laudo.
+Informe itens identificados, estado de conservação e evidências de danos.
+Se algo não estiver claro, use "Necessita validação humana".`,
+    },
+    ...usableItems.map((item) => ({
       inlineData: {
-        data: item.data.includes('base64,') ? item.data.split('base64,')[1] : item.data,
-        mimeType: item.mimeType
-      }
-    }))
+        data: stripDataUrl(item.data),
+        mimeType: item.mimeType,
+      },
+    })),
   ];
 
   try {
@@ -130,13 +152,16 @@ export const analyzeRoomMediaAI = async (
       model: modelName,
       contents: { parts },
       config: {
-        systemInstruction: getSystemInstruction(settings, 'analysis'),
+        systemInstruction: getSystemInstruction(settings, "analysis"),
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             descricaoGeral: { type: Type.STRING },
-            estadoConservacao: { type: Type.STRING, enum: ["Ótimo", "Bom", "Regular", "Ruim"] },
+            estadoConservacao: {
+              type: Type.STRING,
+              enum: ["Ótimo", "Bom", "Regular", "Ruim"],
+            },
             itensIdentificados: {
               type: Type.ARRAY,
               items: {
@@ -144,10 +169,10 @@ export const analyzeRoomMediaAI = async (
                 properties: {
                   item: { type: Type.STRING },
                   estado: { type: Type.STRING },
-                  detalhes: { type: Type.STRING }
+                  detalhes: { type: Type.STRING },
                 },
-                required: ["item", "estado", "detalhes"]
-              }
+                required: ["item", "estado", "detalhes"],
+              },
             },
             evidenciasDanos: {
               type: Type.ARRAY,
@@ -156,38 +181,74 @@ export const analyzeRoomMediaAI = async (
                 properties: {
                   local: { type: Type.STRING },
                   descricao: { type: Type.STRING },
-                  gravidade: { type: Type.STRING, enum: ["Baixa", "Média", "Alta"] }
-                }
-              }
-            }
+                  gravidade: {
+                    type: Type.STRING,
+                    enum: ["Baixa", "Média", "Alta"],
+                  },
+                },
+              },
+            },
           },
-          required: ["descricaoGeral", "estadoConservacao", "itensIdentificados", "evidenciasDanos"]
-        }
-      }
+          required: [
+            "descricaoGeral",
+            "estadoConservacao",
+            "itensIdentificados",
+            "evidenciasDanos",
+          ],
+        },
+      },
     });
 
-    return JSON.parse(response.text.replace(/```json/g, "").replace(/```/g, "").trim());
+    const parsed = extractJson(response.text || "{}");
+
+    return {
+      descricaoGeral: parsed.descricaoGeral || "",
+      estadoConservacao: parsed.estadoConservacao || "Bom",
+      itensIdentificados: Array.isArray(parsed.itensIdentificados) ? parsed.itensIdentificados : [],
+      evidenciasDanos: Array.isArray(parsed.evidenciasDanos) ? parsed.evidenciasDanos : [],
+    };
   } catch (error) {
     console.error("Erro análise IA:", error);
-    throw error;
+    throw new Error("Não foi possível concluir a análise do ambiente com IA.");
   }
 };
 
 export const performComparisonAI = async (
-  entryPdf: string, 
-  exitPdf: string, 
+  entryPdf: string,
+  exitPdf: string,
   settings: AppSettings,
   manualObs?: string
 ): Promise<any> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const modelName = 'gemini-3-flash-preview';
-  
-  const prompt = `PERÍCIA COMPARATIVA:
-Compare o Laudo de ENTRADA (PDF 1) com o Laudo de SAÍDA (PDF 2).
-Identifique danos novos, itens faltantes ou desgaste excessivo.
-${manualObs ? `FOCO ESPECÍFICO: "${manualObs}"` : ''}
-Use Google Search para referenciar custos de reparo.
-Retorne em Markdown técnico.`;
+  const modelName = "gemini-3-flash-preview";
+
+  const entrySize = estimateBase64SizeMB(entryPdf);
+  const exitSize = estimateBase64SizeMB(exitPdf);
+  const totalSize = entrySize + exitSize;
+
+  if (entrySize > 10 || exitSize > 10 || totalSize > 18) {
+    throw new Error(
+      "Os PDFs estão muito pesados para comparação direta. Reduza o tamanho dos arquivos ou gere versões mais leves."
+    );
+  }
+
+  const prompt = `PERÍCIA COMPARATIVA ENTRE LAUDO DE ENTRADA E LAUDO DE SAÍDA
+
+OBJETIVO:
+Comparar os dois documentos e apontar divergências documentais relevantes.
+
+ENTREGUE:
+1. resumo do estado geral;
+2. itens que pioraram;
+3. itens que melhoraram;
+4. danos novos;
+5. observações relevantes;
+6. recomendações;
+7. estimativa de custos com base em fontes públicas, quando aplicável.
+
+${manualObs ? `OBSERVAÇÕES DO VISTORIADOR:\n${manualObs}` : ""}
+
+Escreva em markdown técnico, com linguagem formal e objetiva.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -195,44 +256,70 @@ Retorne em Markdown técnico.`;
       contents: {
         parts: [
           { text: prompt },
-          { inlineData: { data: entryPdf, mimeType: 'application/pdf' } },
-          { inlineData: { data: exitPdf, mimeType: 'application/pdf' } }
-        ]
+          { inlineData: { data: stripDataUrl(entryPdf), mimeType: "application/pdf" } },
+          { inlineData: { data: stripDataUrl(exitPdf), mimeType: "application/pdf" } },
+        ],
       },
       config: {
-        systemInstruction: getSystemInstruction(settings, 'comparison'),
-        tools: [{ googleSearch: {} }]
-      }
+        systemInstruction: getSystemInstruction(settings, "comparison"),
+        tools: [{ googleSearch: {} }],
+      },
     });
 
-    const analysis = response.text || "Erro na geração do parecer.";
-    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
-      ?.map((chunk: any) => ({
-        title: chunk.web?.title || "Fonte de Custo",
-        uri: chunk.web?.uri
-      })).filter((s: any) => s.uri) || [];
+    const analysis = response.text || "Não foi possível gerar o parecer comparativo.";
+    const sources =
+      response.candidates?.[0]?.groundingMetadata?.groundingChunks
+        ?.map((chunk: any) => ({
+          title: chunk.web?.title || "Fonte consultada",
+          uri: chunk.web?.uri,
+        }))
+        .filter((s: any) => s.uri) || [];
 
     return { analysis, sources };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro Comparação:", error);
-    throw error;
+
+    const message = String(error?.message || "");
+    if (message.includes("413") || message.includes("Request Entity Too Large")) {
+      throw new Error(
+        "Os PDFs enviados excedem o limite aceito para comparação. Gere versões mais leves e tente novamente."
+      );
+    }
+
+    throw new Error("Erro na comparação pericial. Verifique os PDFs e tente novamente.");
   }
 };
 
-export const transcribeAudio = async (base64Audio: string, settings: AppSettings, mimeType: string = 'audio/webm'): Promise<string> => {
+export const transcribeAudio = async (
+  base64Audio: string,
+  settings: AppSettings,
+  mimeType: string = "audio/webm"
+): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
-          { text: `Transcreva este áudio de vistoria. Converta para linguagem técnica. Tom: ${settings.tone}.` },
-          { inlineData: { data: base64Audio, mimeType: mimeType } }
-        ]
-      }
+          {
+            text: `Transcreva este áudio de vistoria em português do Brasil.
+Converta para linguagem técnica e objetiva.
+Tom: ${settings.tone}.`,
+          },
+          {
+            inlineData: {
+              data: stripDataUrl(base64Audio),
+              mimeType,
+            },
+          },
+        ],
+      },
     });
+
     return response.text || "";
   } catch (error) {
+    console.error("Erro na transcrição de áudio:", error);
     return "";
   }
 };
