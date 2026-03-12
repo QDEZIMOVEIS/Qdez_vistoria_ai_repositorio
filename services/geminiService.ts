@@ -74,7 +74,7 @@ export const editImageAI = async (
   prompt: string,
   settings: AppSettings
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const modelName = "gemini-2.5-flash-image";
   const base64Data = stripDataUrl(imageData);
 
@@ -126,18 +126,40 @@ export const analyzeRoomMediaAI = async (
   mediaItems: { data: string; mimeType: string }[],
   settings: AppSettings
 ): Promise<any> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const modelName = "gemini-3-flash-preview";
 
-  const usableItems = mediaItems.slice(0, 12);
+  // Gerenciamento de Payload: Limite de ~18MB para segurança (Base64 aumenta o tamanho)
+  let totalSize = 0;
+  const MAX_TOTAL_SIZE = 18 * 1024 * 1024;
+  const usableItems: { data: string; mimeType: string }[] = [];
+
+  for (const item of mediaItems) {
+    const itemSize = (item.data.length * 3) / 4;
+    if (totalSize + itemSize < MAX_TOTAL_SIZE) {
+      usableItems.push(item);
+      totalSize += itemSize;
+    }
+    if (usableItems.length >= 15) break; // Limite de 15 arquivos para análise
+  }
+
+  const hasVideo = usableItems.some(item => item.mimeType.startsWith('video/'));
 
   const parts = [
     {
-      text: `Analise as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
-Retorne SOMENTE JSON válido.
-A descrição deve ser objetiva, técnica e útil para laudo.
-Informe itens identificados, estado de conservação e evidências de danos.
-Se algo não estiver claro, use "Necessita validação humana".`,
+      text: `Você é David Oliveira (Creci 84926-F), Perito Vistoriador.
+Analise as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
+
+FOCO DA ANÁLISE:
+1. ESTADO DE CONSERVAÇÃO: Descreva de forma concisa o estado geral e de itens específicos.
+2. IDENTIFICAÇÃO DE DANOS: Liste avarias, sinais de infiltração, fissuras ou desgastes.
+3. TIMESTAMPS PRECISOS: ${hasVideo ? "Para cada dano ou evidência em vídeo, indique o timestamp exato (MM:SS)." : "N/A"}
+
+REGRAS DE RESPOSTA:
+- Seja extremamente objetivo e técnico.
+- Use termos profissionais (ex: "pintura látex", "esquadrias", "desgaste abrasivo").
+- Evite textos longos; prefira descrições diretas.
+- Retorne APENAS o JSON solicitado.`,
     },
     ...usableItems.map((item) => ({
       inlineData: {
@@ -181,11 +203,13 @@ Se algo não estiver claro, use "Necessita validação humana".`,
                 properties: {
                   local: { type: Type.STRING },
                   descricao: { type: Type.STRING },
+                  timestamp: { type: Type.STRING, description: "MM:SS onde o dano aparece no vídeo, se aplicável" },
                   gravidade: {
                     type: Type.STRING,
                     enum: ["Baixa", "Média", "Alta"],
                   },
                 },
+                required: ["local", "descricao", "gravidade"],
               },
             },
           },
@@ -219,7 +243,7 @@ export const performComparisonAI = async (
   settings: AppSettings,
   manualObs?: string
 ): Promise<any> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const modelName = "gemini-3-flash-preview";
 
   const entrySize = estimateBase64SizeMB(entryPdf);
@@ -295,7 +319,7 @@ export const transcribeAudio = async (
   settings: AppSettings,
   mimeType: string = "audio/webm"
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
   try {
     const response = await ai.models.generateContent({

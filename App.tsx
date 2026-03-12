@@ -157,7 +157,8 @@ const App: React.FC = () => {
       if (analysis.evidenciasDanos.length > 0) {
         formattedText += `\nAVARIAS E OBSERVACÕES:\n`;
         analysis.evidenciasDanos.forEach((dano: any) => {
-          formattedText += `- ${dano.local}: ${dano.descricao} (Gravidade: ${dano.gravidade})\n`;
+          const ts = dano.timestamp ? ` [Vídeo: ${dano.timestamp}]` : "";
+          formattedText += `- ${dano.local}: ${dano.descricao}${ts} (Gravidade: ${dano.gravidade})\n`;
         });
       }
 
@@ -506,7 +507,13 @@ const App: React.FC = () => {
                       </div>
 
                       <div className="grid grid-cols-2 gap-6">
-                        <PhotoUploader onPhotosAdded={(newPhotos) => updateRoom(room.id, { photos: [...room.photos, ...newPhotos] })} />
+                        <PhotoUploader
+                          currentCount={room.photos.length}
+                          maxPhotos={20}
+                          onPhotosAdded={(newPhotos) =>
+                            updateRoom(room.id, { photos: [...room.photos, ...newPhotos] })
+                          }
+                        />
                         <VideoUploader 
                           videos={room.videos}
                           onVideosAdded={(newVideos) => updateRoom(room.id, { videos: [...room.videos, ...newVideos] })} 

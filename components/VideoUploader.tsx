@@ -45,6 +45,16 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideosAdded, videos = [
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    const MAX_VIDEO_SIZE = 15 * 1024 * 1024; // 15MB
+    const oversized = Array.from(files as FileList).some((f: File) => f.size > MAX_VIDEO_SIZE);
+    
+    if (oversized) {
+      if (!confirm("Alguns vídeos são grandes (>15MB) e podem causar lentidão ou erro na análise. Deseja continuar?")) {
+        e.target.value = '';
+        return;
+      }
+    }
+
     setIsUploading(true);
     setProgress(0);
     const newVideos: VideoType[] = [];

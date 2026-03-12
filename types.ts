@@ -4,6 +4,8 @@ export interface Photo {
   data: string; // base64
   mimeType: string;
   label?: string; // Tag para identificar o item (ex: "Parede Norte", "Piso Entrada")
+  name?: string;
+  size?: number;
 }
 
 export interface Video {
