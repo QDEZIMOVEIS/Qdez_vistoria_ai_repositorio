@@ -1,13 +1,4 @@
 
-declare global {
-  interface Window {
-    aistudio: {
-      hasSelectedApiKey: () => Promise<boolean>;
-      openSelectKey: () => Promise<void>;
-    };
-  }
-}
-
 export interface Photo {
   id: string;
   data: string; // base64
