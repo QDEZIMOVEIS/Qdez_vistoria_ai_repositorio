@@ -30,8 +30,14 @@ const VoiceTranscription: React.FC<VoiceTranscriptionProps> = ({ onTranscription
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await handleTranscription(audioBlob);
+        let mimeType = mediaRecorder.mimeType;
+        if (!mimeType) {
+          if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+          else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+          else mimeType = 'audio/webm';
+        }
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        await handleTranscription(audioBlob, mimeType);
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -62,11 +68,12 @@ const VoiceTranscription: React.FC<VoiceTranscriptionProps> = ({ onTranscription
     });
   };
 
-  const handleTranscription = async (blob: Blob) => {
+  const handleTranscription = async (blob: Blob, rawMimeType: string) => {
     setIsProcessing(true);
     try {
       const base64 = await blobToBase64(blob);
-      const text = await transcribeAudio(base64, settings, 'audio/webm');
+      const mimeType = rawMimeType.split(';')[0] || 'audio/webm';
+      const text = await transcribeAudio(base64, settings, mimeType);
       if (text) {
         onTranscriptionComplete(text, selectedMode);
       }

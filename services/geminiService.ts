@@ -81,12 +81,7 @@ export const editImageAI = async (
     throw new Error(`Chave de API do Gemini inválida ou não encontrada na edição. Valor atual: "${rawApiKey}"`);
   }
   const ai = new GoogleGenAI({ 
-    apiKey,
-    httpOptions: {
-      headers: {
-        'x-goog-api-key': apiKey
-      }
-    }
+    apiKey
   });
   const modelName = "gemini-2.5-flash-image";
   const base64Data = stripDataUrl(imageData);
@@ -94,7 +89,7 @@ export const editImageAI = async (
   try {
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: {
+      contents: [{
         parts: [
           {
             inlineData: {
@@ -103,12 +98,11 @@ export const editImageAI = async (
             },
           },
           {
-            text: prompt,
+            text: `${getSystemInstruction(settings, "image_edit")}\n\n${prompt}`,
           },
         ],
-      },
+      }],
       config: {
-        systemInstruction: getSystemInstruction(settings, "image_edit"),
         imageConfig: {
           aspectRatio: "4:3",
         },
@@ -145,12 +139,7 @@ export const analyzeRoomMediaAI = async (
     throw new Error(`Chave de API do Gemini inválida ou não encontrada na análise. Valor atual: "${rawApiKey}"`);
   }
   const ai = new GoogleGenAI({ 
-    apiKey,
-    httpOptions: {
-      headers: {
-        'x-goog-api-key': apiKey
-      }
-    }
+    apiKey
   });
   const modelName = 'gemini-3.1-pro-preview';
 
@@ -216,7 +205,7 @@ Retorne APENAS o JSON conforme o esquema solicitado.
   try {
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: { parts },
+      contents: [{ parts }],
       config: {
         systemInstruction: getSystemInstruction(settings, 'analysis'),
         responseMimeType: 'application/json',
@@ -350,12 +339,7 @@ export const performComparisonAI = async (
     throw new Error(`Chave de API do Gemini inválida ou não encontrada na comparação. Valor atual: "${rawApiKey}"`);
   }
   const ai = new GoogleGenAI({ 
-    apiKey,
-    httpOptions: {
-      headers: {
-        'x-goog-api-key': apiKey
-      }
-    }
+    apiKey
   });
   const modelName = "gemini-3-flash-preview";
 
@@ -390,13 +374,13 @@ Escreva em markdown técnico, com linguagem formal e objetiva.`;
   try {
     const response = await ai.models.generateContent({
       model: modelName,
-      contents: {
+      contents: [{
         parts: [
           { text: prompt },
           { inlineData: { data: stripDataUrl(entryPdf), mimeType: "application/pdf" } },
           { inlineData: { data: stripDataUrl(exitPdf), mimeType: "application/pdf" } },
         ],
-      },
+      }],
       config: {
         systemInstruction: getSystemInstruction(settings, "comparison"),
         tools: [{ googleSearch: {} }],
@@ -441,18 +425,13 @@ export const transcribeAudio = async (
   const apiKey = rawApiKey ? rawApiKey.trim() : '';
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null') return "";
   const ai = new GoogleGenAI({ 
-    apiKey,
-    httpOptions: {
-      headers: {
-        'x-goog-api-key': apiKey
-      }
-    }
+    apiKey
   });
 
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: {
+      contents: [{
         parts: [
           {
             text: `Transcreva este áudio de vistoria em português do Brasil.
@@ -466,7 +445,7 @@ Tom: ${settings.tone}.`,
             },
           },
         ],
-      },
+      }],
     });
 
     return response.text || "";
