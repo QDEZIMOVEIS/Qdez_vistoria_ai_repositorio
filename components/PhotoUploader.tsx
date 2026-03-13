@@ -1,169 +1,76 @@
-import React, { useRef, useState } from 'react';
-import heic2any from 'heic2any';
+
+import React from 'react';
 import { Photo } from '../types';
 
 interface PhotoUploaderProps {
-  onPhotosAdded: (photos: Photo[]) => void;
-  currentCount?: number;
-  maxPhotos?: number;
+  onPhotosAdded: (newPhotos: Photo[]) => void;
 }
 
-const resizeImage = (file: File): Promise<string> =>
-  new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const MAX_SIZE = 1200;
-
-        if (width > height) {
-          if (width > MAX_SIZE) {
-            height *= MAX_SIZE / width;
-            width = MAX_SIZE;
+const PhotoUploader: React.FC<PhotoUploaderProps> = ({ onPhotosAdded }) => {
+  const resizeImage = (file: File): Promise<Photo> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const MAX_SIZE = 1200;
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
           }
-        } else {
-          if (height > MAX_SIZE) {
-            width *= MAX_SIZE / height;
-            height = MAX_SIZE;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve({
+            id: Math.random().toString(36).substr(2, 9),
+            data: dataUrl,
+            mimeType: 'image/jpeg',
+          });
+        };
+        img.src = e.target?.result as string;
       };
-      img.src = e.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
+      reader.readAsDataURL(file);
+    });
+  };
 
-const PhotoUploader: React.FC<PhotoUploaderProps> = ({
-  onPhotosAdded,
-  currentCount = 0,
-  maxPhotos = 20,
-}) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleFiles = async (filesList: FileList | null) => {
-    if (!filesList || filesList.length === 0) return;
-
-    const files = Array.from(filesList).filter((file) =>
-      file.type.startsWith('image/') || 
-      file.name.toLowerCase().endsWith('.heic') || 
-      file.name.toLowerCase().endsWith('.heif')
-    );
-
-    if (files.length === 0) {
-      alert('Selecione arquivos de imagem válidos.');
-      return;
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const newPhotos: Photo[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const photo = await resizeImage(files[i]);
+      newPhotos.push(photo);
     }
-
-    const availableSlots = maxPhotos - currentCount;
-
-    if (availableSlots <= 0) {
-      alert(`Este ambiente já atingiu o limite de ${maxPhotos} fotos.`);
-      return;
-    }
-
-    const selectedFiles = files.slice(0, availableSlots);
-
-    if (files.length > availableSlots) {
-      alert(
-        `Somente ${availableSlots} foto(s) foram adicionadas. Limite por ambiente: ${maxPhotos}.`
-      );
-    }
-
-    setIsLoading(true);
-
-    try {
-      const newPhotos: Photo[] = [];
-
-      for (const file of selectedFiles) {
-        let fileToProcess = file;
-
-        // Converter HEIC/HEIF para JPEG se necessário
-        if (file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
-          try {
-            const convertedBlob = await heic2any({
-              blob: file,
-              toType: 'image/jpeg',
-              quality: 0.8
-            });
-            const resultBlob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-            fileToProcess = new File([resultBlob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), {
-              type: 'image/jpeg'
-            });
-          } catch (err) {
-            console.error('Erro ao converter HEIC:', err);
-            continue; // Pula este arquivo se a conversão falhar
-          }
-        }
-
-        const dataUrl = await resizeImage(fileToProcess);
-
-        newPhotos.push({
-          id: Math.random().toString(36).substr(2, 9),
-          data: dataUrl,
-          mimeType: 'image/jpeg',
-          label: '',
-          name: fileToProcess.name,
-          size: fileToProcess.size,
-        });
-      }
-
-      onPhotosAdded(newPhotos);
-
-      if (inputRef.current) {
-        inputRef.current.value = '';
-      }
-    } catch (error) {
-      console.error('Erro ao carregar fotos:', error);
-      alert('Não foi possível carregar uma ou mais fotos.');
-    } finally {
-      setIsLoading(false);
-    }
+    onPhotosAdded(newPhotos);
+    e.target.value = '';
   };
 
   return (
-    <div className="bg-white border border-slate-100 rounded-[2rem] p-5 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-            Fotos do ambiente
-          </p>
-          <p className="text-[10px] font-bold text-slate-500">
-            {currentCount}/{maxPhotos} fotos
-          </p>
+    <div className="flex items-center justify-center w-full">
+      <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-300 rounded-[2rem] cursor-pointer bg-white hover:bg-slate-50 transition-all group shadow-sm active:scale-95">
+        <div className="flex flex-col items-center justify-center pt-5 pb-6 text-center px-4">
+          <div className="w-10 h-10 bg-slate-50 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-red-50 transition-colors">
+            <svg className="w-6 h-6 text-slate-400 group-hover:text-red-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <p className="text-[10px] text-slate-600 font-black uppercase tracking-widest">Fotos do Ambiente</p>
+          <p className="text-[8px] text-slate-400 mt-1 uppercase font-bold">(Múltiplas da Galeria)</p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={isLoading || currentCount >= maxPhotos}
-          className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase disabled:opacity-50"
-        >
-          {isLoading ? 'Carregando...' : 'Selecionar Fotos'}
-        </button>
-      </div>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*,.heic,.heif"
-        multiple
-        className="hidden"
-        onChange={(e) => handleFiles(e.target.files)}
-      />
-
-      <div className="text-[9px] text-slate-400 font-bold">
-        Você pode selecionar várias fotos de uma vez, até o limite de {maxPhotos} por ambiente.
-      </div>
+        <input type="file" multiple accept="image/*" className="hidden" onChange={handleFileChange} />
+      </label>
     </div>
   );
 };

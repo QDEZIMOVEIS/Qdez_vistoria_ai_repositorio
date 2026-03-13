@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import localforage from 'localforage';
-import { Inspection, Room, COMMON_ROOMS, Photo, Video, AppSettings, Audio } from './types';
+import { Inspection, Room, COMMON_ROOMS, Photo, Video, AppSettings } from './types';
 import PhotoUploader from './components/PhotoUploader';
 import VideoUploader from './components/VideoUploader';
 import VoiceTranscription from './components/VoiceTranscription';
@@ -28,17 +28,8 @@ const App: React.FC = () => {
   const [current, setCurrent] = useState<Inspection | null>(null);
   const [view, setView] = useState<'list' | 'editor' | 'report' | 'comparison' | 'type_selector' | 'settings'>('list');
   const [isBusy, setIsBusy] = useState(false);
-  const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [editingRoom, setEditingRoom] = useState<string | null>(null);
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [errorRoomId, setErrorRoomId] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
 
   // Estados para edição de imagem via IA
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
@@ -64,31 +55,8 @@ const App: React.FC = () => {
     if (isLoaded) {
       localforage.setItem('qdez_rascunhos', inspections);
       localforage.setItem('qdez_settings', settings);
-      setLastSaved(new Date().toLocaleTimeString());
     }
   }, [inspections, settings, isLoaded]);
-
-  // Persistência do estado atual para evitar perda em refresh
-  useEffect(() => {
-    if (isLoaded) {
-      if (current) {
-        localforage.setItem('qdez_current_editing', current);
-      } else {
-        localforage.removeItem('qdez_current_editing');
-      }
-    }
-  }, [current, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded) {
-      localforage.getItem<Inspection>('qdez_current_editing').then(stored => {
-        if (stored && !current) {
-          setCurrent(stored);
-          setView(stored.type === 'Comparação' ? 'comparison' : 'editor');
-        }
-      });
-    }
-  }, [isLoaded]);
 
   const saveToGlobalList = (updatedIns: Inspection) => {
     setInspections(prev => {
@@ -106,7 +74,7 @@ const App: React.FC = () => {
     const updated = { ...ins, isSynced: true };
     saveToGlobalList(updated);
     setIsBusy(false);
-    showToast("Vistoria sincronizada com Storage Qdez!");
+    alert("Vistoria sincronizada com Storage Qdez!");
   };
 
   const updateCurrent = (updates: Partial<Inspection>) => {
@@ -122,95 +90,44 @@ const App: React.FC = () => {
     updateCurrent({ rooms });
   };
 
-  const deleteRoom = (roomId: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!current) return;
-    if (!confirm("Tem certeza que deseja excluir este ambiente?")) return;
-    const rooms = current.rooms.filter(r => r.id !== roomId);
-    updateCurrent({ rooms });
-    if (editingRoom === roomId) setEditingRoom(null);
-  };
-
   const addRoom = (type: string) => {
     if (!current) return;
-    const newRoom: Room = { 
-      id: Math.random().toString(36).substr(2, 9), 
-      type, 
-      description: '', 
-      photos: [], 
-      videos: [], 
-      audios: [],
-      condition: 'Bom',
-      reparoStatus: current.subtipoConstatacao === 'Reparos' ? 'Não Executado' : undefined
-    };
+    const newRoom: Room = { id: Math.random().toString(36).substr(2, 9), type, description: '', photos: [], videos: [], condition: 'Bom' };
     updateCurrent({ rooms: [...current.rooms, newRoom] });
     setEditingRoom(newRoom.id);
   };
 
-  const handleSaveDraft = () => {
-    setView('list');
-    setCurrent(null);
-  };
-
-  const handleCompleteInspection = () => {
-    if (!current) return;
-    updateCurrent({ status: 'completed', date: new Date().toISOString() });
-    setView('report');
-  };
-
-  const handleManualRoomAnalysis = async (roomId: string, overrideVideos?: Video[], overridePhotos?: Photo[]) => {
+  const handleManualRoomAnalysis = async (roomId: string) => {
     if (!current) return;
     const room = current.rooms.find(r => r.id === roomId);
     if (!room) return;
 
-    const photos = overridePhotos || room.photos;
-    const videos = overrideVideos || room.videos;
-
-    if (photos.length === 0 && videos.length === 0) {
-      showToast("Por favor, adicione fotos ou vídeos para análise.");
+    if (room.photos.length === 0 && room.videos.length === 0) {
+      alert("Por favor, adicione fotos ou vídeos para análise.");
       return;
     }
 
     setProcessingRoomId(roomId);
-    setAnalysisError(null);
-    setErrorRoomId(null);
     try {
       const mediaItems = [
-        ...photos.map(p => ({ data: p.data, mimeType: p.mimeType })),
-        ...videos.map(v => ({ data: v.data, mimeType: v.mimeType }))
+        ...room.photos.map(p => ({ data: p.data, mimeType: p.mimeType })),
+        ...room.videos.map(v => ({ data: v.data, mimeType: v.mimeType }))
       ];
 
       const analysis = await analyzeRoomMediaAI(room.type, current.type, mediaItems, settings);
       
-      let formattedText = `AMBIENTE: ${room.customName || room.type}\n`;
-      formattedText += `PONTUAÇÃO GERAL: ${analysis.notaGeral || 'N/A'}/10\n\n`;
-      
+      let formattedText = `AMBIENTE: ${room.customName || room.type}\n\n`;
       formattedText += `DESCRIÇÃO TÉCNICA:\n${analysis.descricaoGeral}\n\n`;
       
-      if (analysis.itensQuantitativos && analysis.itensQuantitativos.length > 0) {
-        formattedText += `INVENTÁRIO QUANTITATIVO:\n`;
-        analysis.itensQuantitativos.forEach((iq: any) => {
-          const marca = iq.marca && iq.marca !== 'Não identificada' ? ` (Marca: ${iq.marca})` : "";
-          formattedText += `- ${iq.quantidade}x ${iq.item}${marca}\n`;
-        });
-        formattedText += `\n`;
-      }
-
       formattedText += `COMPONENTES E CONSERVAÇÃO:\n`;
       analysis.itensIdentificados.forEach((item: any) => {
-        const mat = item.material ? ` [${item.material}]` : "";
-        formattedText += `- ${item.item}${mat}: ${item.estado}. ${item.detalhes}\n`;
+        formattedText += `- ${item.item}: ${item.estado}. ${item.detalhes}\n`;
       });
 
       if (analysis.evidenciasDanos.length > 0) {
-        formattedText += `\nAVARIAS E OBSERVAÇÕES:\n`;
+        formattedText += `\nAVARIAS E OBSERVACÕES:\n`;
         analysis.evidenciasDanos.forEach((dano: any) => {
-          const ts = dano.timestamp ? ` [Ref: ${dano.timestamp}]` : "";
-          const cat = dano.categoria ? ` [Cat: ${dano.categoria}]` : "";
-          const causa = dano.causaProvavel ? `\n  ↳ Causa: ${dano.causaProvavel}` : "";
-          const sugestao = dano.sugestaoReparo ? `\n  ↳ Reparo: ${dano.sugestaoReparo}` : "";
-          formattedText += `- ${dano.local}: ${dano.descricao}${ts}${cat} (Gravidade: ${dano.gravidade})${causa}${sugestao}\n`;
+          formattedText += `- ${dano.local}: ${dano.descricao} (Gravidade: ${dano.gravidade})\n`;
         });
       }
 
@@ -218,10 +135,9 @@ const App: React.FC = () => {
         description: formattedText.trim(),
         condition: analysis.estadoConservacao
       });
-    } catch (err: any) {
+    } catch (err) {
       console.error("Erro na análise técnica:", err);
-      setAnalysisError(err.message || "Erro desconhecido na análise.");
-      setErrorRoomId(roomId);
+      alert("Houve um erro ao processar a análise com IA.");
     } finally {
       setProcessingRoomId(null);
     }
@@ -244,27 +160,17 @@ const App: React.FC = () => {
       setEditingPhotoId(null);
       setIaPrompt('');
     } catch (err) {
-      showToast("Não foi possível editar a imagem. O modelo pode ter tido dificuldades com o prompt.");
+      alert("Não foi possível editar a imagem. O modelo pode ter tido dificuldades com o prompt.");
     } finally {
       setIsEditingIA(false);
     }
   };
 
-  const confirmNewInspection = (type: Inspection['type'], subtipo?: 'Padrão' | 'Reparos') => {
+  const confirmNewInspection = (type: Inspection['type']) => {
     const newIns: Inspection = {
       id: 'VST-' + Math.random().toString(36).substr(2, 6).toUpperCase(),
-      clientName: '', 
-      tenantName: '', 
-      tenantNames: [''],
-      inspectorName: DEFAULT_INSPECTOR,
-      type, 
-      subtipoConstatacao: subtipo,
-      address: '', 
-      date: new Date().toISOString(), 
-      rooms: [], 
-      status: 'draft', 
-      isSynced: false,
-      observacoesGerais: ''
+      clientName: '', tenantName: '', inspectorName: DEFAULT_INSPECTOR,
+      type, address: '', date: new Date().toISOString(), rooms: [], status: 'draft', isSynced: false
     };
     setCurrent(newIns);
     saveToGlobalList(newIns);
@@ -275,7 +181,7 @@ const App: React.FC = () => {
     if (!pdfEntry || !pdfExit || !current) return;
     const totalSizeMB = (pdfEntry.size + pdfExit.size) / (1024 * 1024);
     if (totalSizeMB > MAX_PAYLOAD_MB) {
-      showToast(`Arquivos muito grandes para processamento direto.`);
+      alert(`Arquivos muito grandes para processamento direto.`);
       return;
     }
     setIsBusy(true);
@@ -290,7 +196,7 @@ const App: React.FC = () => {
       saveToGlobalList(updated);
       setView('report');
     } catch (e: any) {
-      showToast(e.message || "Erro na perícia.");
+      alert("Erro na perícia.");
     } finally { setIsBusy(false); }
   };
 
@@ -306,27 +212,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleTranscription = (text: string, destination: 'general' | 'room' | 'comparison') => {
-    if (!current) return;
-    if (destination === 'general') {
-      updateCurrent({ observacoesGerais: (current.observacoesGerais || '') + '\n' + text });
-    } else if (destination === 'room' && editingRoom) {
-      const room = current.rooms.find(r => r.id === editingRoom);
-      if (room) {
-        updateRoom(editingRoom, { description: (room.description + '\n' + text).trim() });
-      }
-    } else if (destination === 'comparison') {
-      setManualComparisonObs(prev => (prev + '\n' + text).trim());
-    }
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl text-xs font-bold uppercase tracking-widest animate-in fade-in slide-in-from-top-4">
-          {toastMessage}
-        </div>
-      )}
       <header className="bg-slate-900 text-white p-4 sticky top-0 z-50 shadow-lg no-print">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('list')}>
@@ -344,8 +231,7 @@ const App: React.FC = () => {
             <div className="grid gap-4">
               {inspections.length === 0 ? (
                 <div className="p-16 border-2 border-dashed border-slate-200 rounded-[3rem] text-center bg-white/50">
-                  <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mb-4">Inicie um novo laudo profissional</p>
-                  <button onClick={() => setView('type_selector')} className="text-red-600 font-black text-xs uppercase hover:underline">Criar Vistoria</button>
+                  <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Sem registros.</p>
                 </div>
               ) : (
                 inspections.map(ins => (
@@ -353,9 +239,6 @@ const App: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex gap-2 items-center mb-1">
                         <span className="text-[9px] font-black uppercase text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{ins.type}</span>
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${ins.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                          {ins.status === 'completed' ? 'Finalizado' : 'Rascunho'}
-                        </span>
                         <span className="text-[9px] font-bold text-slate-400">#{ins.id}</span>
                         {ins.isSynced && <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase">Cloud ✓</span>}
                       </div>
@@ -382,29 +265,15 @@ const App: React.FC = () => {
         {view === 'type_selector' && (
           <div className="max-w-md mx-auto pt-20 animate-in zoom-in-95 duration-300">
             <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 text-center">
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-2">Novo Laudo</h2>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Selecione o modelo de vistoria</p>
-              
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8">Novo Relatório</h2>
               <div className="grid gap-3">
-                <button onClick={() => confirmNewInspection('Entrada')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Vistoria de Entrada</span>
-                  <span className="text-[9px] font-medium text-slate-400 uppercase">Laudo inicial de entrega de imóvel</span>
-                </button>
-                <button onClick={() => confirmNewInspection('Saída')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Vistoria de Saída</span>
-                  <span className="text-[9px] font-medium text-slate-400 uppercase">Verificação para encerramento de contrato</span>
-                </button>
-                <button onClick={() => confirmNewInspection('Constatação', 'Padrão')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Vistoria de Constatação</span>
-                  <span className="text-[9px] font-medium text-slate-400 uppercase">Registro fiel da situação atual</span>
-                </button>
-                <button onClick={() => confirmNewInspection('Comparação')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Comparativo IA</span>
-                  <span className="text-[9px] font-medium text-slate-400 uppercase">Análise pericial entre dois laudos</span>
-                </button>
+                {['Entrada', 'Saída', 'Comparação'].map(type => (
+                  <button key={type} onClick={() => confirmNewInspection(type as any)} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                    <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Vistoria de {type}</span>
+                  </button>
+                ))}
               </div>
-              
-              <button onClick={() => setView('list')} className="mt-8 text-[10px] font-black text-slate-300 uppercase hover:text-slate-500 tracking-widest">Voltar</button>
+              <button onClick={() => setView('list')} className="mt-8 text-[10px] font-black text-slate-300 uppercase tracking-widest">Voltar</button>
             </div>
           </div>
         )}
@@ -412,10 +281,7 @@ const App: React.FC = () => {
         {view === 'comparison' && current && (
           <div className="max-w-xl mx-auto space-y-6 pt-10 pb-40 animate-in fade-in duration-500">
              <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100">
-               <div className="flex justify-between items-center mb-10">
-                 <h2 className="text-2xl font-black uppercase tracking-tighter">Comparativo IA</h2>
-                 <button onClick={() => setView('list')} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-600 transition-colors">Voltar</button>
-               </div>
+               <h2 className="text-2xl font-black mb-10 uppercase tracking-tighter">Comparativo IA</h2>
                <div className="space-y-6">
                  <div className={`p-8 rounded-[2rem] border-2 border-dashed ${pdfEntry ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'}`}>
                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-4">Laudo de ENTRADA (PDF)</label>
@@ -427,41 +293,13 @@ const App: React.FC = () => {
                  </div>
                  <div className="space-y-4 pt-6 border-t">
                     <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" placeholder="Locador / Proprietário" value={current.clientName} onChange={(e) => updateCurrent({ clientName: e.target.value })} />
-                    <div className="space-y-2">
-                       <label className="text-[9px] font-black uppercase text-slate-400 px-2">Locatários / Proponentes</label>
-                       {(current.tenantNames || [current.tenantName]).map((name, idx) => (
-                         <div key={idx} className="flex gap-2">
-                           <input 
-                             className="flex-1 bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" 
-                             placeholder={`Locatário ${idx + 1}`} 
-                             value={name} 
-                             onChange={(e) => {
-                               const names = [...(current.tenantNames || [current.tenantName])];
-                               names[idx] = e.target.value;
-                               updateCurrent({ tenantNames: names, tenantName: names[0] });
-                             }} 
-                           />
-                           {idx > 0 && (
-                             <button onClick={() => {
-                               const names = (current.tenantNames || [current.tenantName]).filter((_, i) => i !== idx);
-                               updateCurrent({ tenantNames: names, tenantName: names[0] });
-                             }} className="p-4 text-red-500">
-                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                             </button>
-                           )}
-                         </div>
-                       ))}
-                       <button onClick={() => updateCurrent({ tenantNames: [...(current.tenantNames || [current.tenantName]), ''] })} className="text-[9px] font-black text-red-600 uppercase px-2">+ Adicionar Locatário</button>
-                    </div>
+                    <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" placeholder="Locatário" value={current.tenantName} onChange={(e) => updateCurrent({ tenantName: e.target.value })} />
                     <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border border-slate-100" placeholder="Endereço Completo" value={current.address} onChange={(e) => updateCurrent({ address: e.target.value })} />
                     <textarea className="w-full bg-slate-50 p-6 rounded-[2rem] border border-slate-100 text-xs h-36" placeholder="Notas do perito para foco da análise..." value={manualComparisonObs} onChange={(e) => setManualComparisonObs(e.target.value)} />
                  </div>
                </div>
                <button onClick={handleRunComparison} disabled={isBusy || !pdfEntry || !pdfExit} className="w-full mt-10 bg-slate-900 text-white py-6 rounded-[2.5rem] font-black uppercase text-xs shadow-2xl disabled:opacity-50">
                  {isBusy ? "David Oliveira Periciando..." : "Gerar Perícia David Oliveira"}
-               </button>
-               <button onClick={handleSaveDraft} className="w-full mt-4 bg-slate-100 text-slate-500 py-4 rounded-[2rem] font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-all">
-                 Salvar Rascunho
                </button>
              </div>
           </div>
@@ -474,36 +312,7 @@ const App: React.FC = () => {
               <input className="w-full text-2xl font-black border-none focus:ring-0 p-0 uppercase tracking-tighter mb-8 bg-transparent" placeholder="Endereço do Imóvel" value={current.address} onChange={(e) => updateCurrent({ address: e.target.value })} />
               <div className="grid grid-cols-2 gap-6">
                 <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border-none" placeholder="Locador" value={current.clientName} onChange={(e) => updateCurrent({ clientName: e.target.value })} />
-                <div className="space-y-2">
-                  {(current.tenantNames || [current.tenantName]).map((name, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <input 
-                        className="flex-1 bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border-none" 
-                        placeholder={`Locatário ${idx + 1}`} 
-                        value={name} 
-                        onChange={(e) => {
-                          const names = [...(current.tenantNames || [current.tenantName])];
-                          names[idx] = e.target.value;
-                          updateCurrent({ tenantNames: names, tenantName: names[0] });
-                        }} 
-                      />
-                      {idx > 0 && (
-                        <button onClick={() => {
-                          const names = (current.tenantNames || [current.tenantName]).filter((_, i) => i !== idx);
-                          updateCurrent({ tenantNames: names, tenantName: names[0] });
-                        }} className="p-4 text-red-500">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button onClick={() => updateCurrent({ tenantNames: [...(current.tenantNames || [current.tenantName]), ''] })} className="text-[9px] font-black text-red-600 uppercase px-2">+ Adicionar Locatário</button>
-                </div>
-              </div>
-              <div className="mt-6 pt-6 border-t border-slate-50">
-                <label className="text-[9px] font-black uppercase text-slate-400 px-2 block mb-2">Observações Gerais</label>
-                <VoiceTranscription settings={settings} onTranscriptionComplete={handleTranscription} mode="general" />
-                <textarea className="w-full bg-slate-50 p-6 rounded-[2rem] border border-slate-100 text-xs h-32 mt-2" placeholder="Observações gerais do laudo..." value={current.observacoesGerais || ''} onChange={(e) => updateCurrent({ observacoesGerais: e.target.value })} />
+                <input className="w-full bg-slate-50 p-4 rounded-2xl text-[10px] font-black uppercase border-none" placeholder="Locatário" value={current.tenantName} onChange={(e) => updateCurrent({ tenantName: e.target.value })} />
               </div>
             </div>
 
@@ -525,48 +334,14 @@ const App: React.FC = () => {
                       </div>
                       <div>
                         <h4 className="font-black text-slate-800 uppercase text-xs">{room.customName || room.type}</h4>
-                        <div className="flex gap-2 items-center">
-                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{room.photos.length} Fotos • {room.condition}</span>
-                          {current.subtipoConstatacao === 'Reparos' && (
-                            <span className={`text-[7px] font-black px-1.5 py-0.5 rounded uppercase ${room.reparoStatus === 'Concluído' ? 'bg-emerald-100 text-emerald-700' : room.reparoStatus === 'Parcial' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                              {room.reparoStatus}
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{room.photos.length} Fotos • {room.condition}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      {processingRoomId === room.id ? <span className="text-[9px] font-black text-red-600 animate-pulse">Analisando...</span> : <svg className={`w-4 h-4 text-slate-300 transition-all ${editingRoom === room.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>}
-                      <button onClick={(e) => deleteRoom(room.id, e)} className="p-2 text-slate-300 hover:text-red-600 transition-colors">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
-                    </div>
+                    {processingRoomId === room.id ? <span className="text-[9px] font-black text-red-600 animate-pulse">Analisando...</span> : <svg className={`w-4 h-4 text-slate-300 transition-all ${editingRoom === room.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>}
                   </div>
 
                   {editingRoom === room.id && (
                     <div className="p-8 border-t border-slate-50 space-y-8 bg-slate-50/10">
-                      {current.subtipoConstatacao === 'Reparos' && (
-                        <div className="bg-white p-6 rounded-3xl border border-slate-100 space-y-4 shadow-sm">
-                          <label className="text-[10px] font-black uppercase text-slate-400 block">Status do Reparo</label>
-                          <div className="flex gap-2">
-                            {(['Concluído', 'Parcial', 'Não Executado'] as const).map(status => (
-                              <button 
-                                key={status} 
-                                onClick={() => updateRoom(room.id, { reparoStatus: status })}
-                                className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${room.reparoStatus === status ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-                              >
-                                {status}
-                              </button>
-                            ))}
-                          </div>
-                          <textarea 
-                            className="w-full bg-slate-50 p-4 rounded-2xl text-xs border border-slate-100 h-24" 
-                            placeholder="Descreva o reparo solicitado/identificado..." 
-                            value={room.reparoDescricao || ''} 
-                            onChange={(e) => updateRoom(room.id, { reparoDescricao: e.target.value })} 
-                          />
-                        </div>
-                      )}
                       <div className="grid grid-cols-2 gap-6">
                         <input className="w-full bg-white p-4 rounded-2xl text-xs font-bold border border-slate-100" placeholder="Nome do Ambiente" value={room.customName || ''} onChange={(e) => updateRoom(room.id, { customName: e.target.value })} />
                         <div className="flex gap-1.5 p-1 bg-white rounded-2xl border border-slate-100">
@@ -577,23 +352,8 @@ const App: React.FC = () => {
                       </div>
 
                       <div className="grid grid-cols-2 gap-6">
-                        <PhotoUploader
-                          currentCount={room.photos.length}
-                          maxPhotos={20}
-                          onPhotosAdded={(newPhotos) =>
-                            updateRoom(room.id, { photos: [...room.photos, ...newPhotos] })
-                          }
-                        />
-                        <VideoUploader 
-                          videos={room.videos}
-                          onVideosAdded={(newVideos) => {
-                            const updatedVideos = [...room.videos, ...newVideos];
-                            updateRoom(room.id, { videos: updatedVideos });
-                            // Dispara análise automática após upload de vídeo
-                            handleManualRoomAnalysis(room.id, updatedVideos);
-                          }} 
-                          onRemoveVideo={(videoId) => updateRoom(room.id, { videos: room.videos.filter(v => v.id !== videoId) })}
-                        />
+                        <PhotoUploader onPhotosAdded={(newPhotos) => updateRoom(room.id, { photos: [...room.photos, ...newPhotos] })} />
+                        <VideoUploader onVideosAdded={(newVideos) => updateRoom(room.id, { videos: [...room.videos, ...newVideos] })} />
                       </div>
 
                       {/* Grade de Fotos com Edição IA e Tags */}
@@ -611,7 +371,7 @@ const App: React.FC = () => {
                                         title="Edição Mágica David Oliveira"
                                       >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 00-3.86.517L6.05 15.21a2 2 0 00-1.183.394l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394l-1.93-.386a6 6 0 01-3.86-.517l-.318-.158a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.183.394l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394l-1.93-.386a6 6 0 01-3.86-.517l-.318-.158a6 6 0 00-3.86-.517l-2.387.477a2 2 0 00-1.022.547l-1.154.908a2.41 2.41 0 01-3.057 0l-1.154-.908a2 2 0 00-1.183-.394" />
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 3l.867 2.6A1 1 0 0014.816 6.3l2.6.867a1 1 0 010 1.866l-2.6.867a1 1 0 00-.949.633L13 13.134l-.867-2.6a1 1 0 00-.949-.633l-2.6-.867a1 1 0 010-1.866l2.6-.867a1 1 0 00.949-.633L13 3z" />
                                         </svg>
                                       </button>
@@ -669,94 +429,11 @@ const App: React.FC = () => {
                         </div>
                       )}
 
-                      {room.videos.length > 0 && (
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                              Vídeos salvos
-                            </p>
-                            <span className="text-[9px] font-bold text-slate-400">
-                              {room.videos.length} vídeo(s)
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {room.videos.map((video, index) => (
-                              <div
-                                key={video.id}
-                                className="bg-white border border-slate-100 rounded-[1.5rem] overflow-hidden shadow-sm"
-                              >
-                                <video
-                                  src={video.data}
-                                  controls
-                                  preload="metadata"
-                                  className="w-full h-56 object-cover bg-slate-900"
-                                />
-
-                                <div className="p-4 flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase text-slate-700 truncate">
-                                      {((video as any).name) || ((video as any).fileName) || `Vídeo ${index + 1}`}
-                                    </p>
-                                    <p className="text-[9px] text-slate-400">
-                                      {((video as any).duration ? `${Math.round((video as any).duration)}s` : 'Sem duração')}
-                                      {((video as any).size ? ` • ${Math.round((((video as any).size / 1024 / 1024) * 10)) / 10} MB` : '')}
-                                    </p>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      updateRoom(room.id, {
-                                        videos: room.videos.filter(v => v.id !== video.id),
-                                      })
-                                    }
-                                    className="p-2 bg-red-50 text-red-600 rounded-full hover:bg-red-600 hover:text-white transition-all"
-                                    title="Excluir vídeo"
-                                  >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
                       <div className="space-y-4">
                         <div className="flex gap-3 bg-slate-900 p-2.5 rounded-2xl shadow-xl items-center">
-                           <VoiceTranscription settings={settings} onTranscriptionComplete={(text, dest) => handleTranscription(text, dest)} mode="room" />
-                           <button 
-                             onClick={() => handleManualRoomAnalysis(room.id)} 
-                             disabled={processingRoomId === room.id} 
-                             className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${processingRoomId === room.id ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
-                           >
-                             {processingRoomId === room.id ? 'Analisando...' : 'Análise IA David Oliveira'}
-                           </button>
+                           <VoiceTranscription settings={settings} onTranscriptionComplete={(text) => updateRoom(room.id, { description: (room.description + '\n' + text).trim() })} />
+                           <button onClick={() => handleManualRoomAnalysis(room.id)} disabled={processingRoomId === room.id} className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-[9px] font-black uppercase transition-all hover:bg-red-700">Análise IA David Oliveira</button>
                         </div>
-                        
-                        {analysisError && errorRoomId === room.id && (
-                          <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-                            <div className="w-8 h-8 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                              <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                              </svg>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[10px] text-red-600 font-black uppercase tracking-widest">Erro na Análise Técnica</p>
-                              <p className="text-[9px] text-red-500 font-bold mt-0.5 mb-1.5 break-words max-h-32 overflow-y-auto custom-scrollbar">{analysisError}</p>
-                              <button 
-                                onClick={() => handleManualRoomAnalysis(room.id)}
-                                className="text-[8px] font-black text-red-600 hover:text-red-700 underline uppercase tracking-tighter"
-                              >
-                                Tentar Novamente
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
                         <textarea className="w-full bg-white p-6 rounded-[2rem] border border-slate-100 text-xs h-64 leading-relaxed font-medium outline-none focus:ring-4 focus:ring-red-50 transition-all" placeholder="A IA David Oliveira gerará o laudo técnico..." value={room.description} onChange={(e) => updateRoom(room.id, { description: e.target.value })} />
                       </div>
                     </div>
@@ -767,19 +444,8 @@ const App: React.FC = () => {
 
             <div className="fixed bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-slate-50 via-slate-50 to-transparent no-print pointer-events-none z-40">
               <div className="max-w-md mx-auto grid grid-cols-2 gap-4 pointer-events-auto">
-                <button
-                  onClick={handleSaveDraft}
-                  className="bg-slate-200 text-slate-700 py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all"
-                >
-                  Salvar Rascunho
-                </button>
-
-                <button
-                  onClick={handleCompleteInspection}
-                  className="bg-slate-900 text-white py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-2xl active:scale-95 transition-all"
-                >
-                  Gerar Laudo
-                </button>
+                <button onClick={() => setView('list')} className="bg-slate-200 text-slate-700 py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-lg active:scale-95 transition-all">Salvar</button>
+                <button onClick={() => { updateCurrent({ status: 'completed', date: new Date().toISOString() }); setView('report'); }} className="bg-slate-900 text-white py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-widest shadow-2xl active:scale-95 transition-all">Gerar Laudo</button>
               </div>
             </div>
           </div>
