@@ -49,6 +49,36 @@ const App: React.FC = () => {
   const [pdfExit, setPdfExit] = useState<{data: string, size: number} | null>(null);
   const [manualComparisonObs, setManualComparisonObs] = useState('');
 
+  const [isApiKeySelected, setIsApiKeySelected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        try {
+          const hasKey = await window.aistudio.hasSelectedApiKey();
+          setIsApiKeySelected(hasKey);
+        } catch (e) {
+          console.error("Erro ao verificar chave de API:", e);
+          setIsApiKeySelected(true);
+        }
+      } else {
+        setIsApiKeySelected(true);
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleOpenKeySelector = async () => {
+    if (window.aistudio) {
+      try {
+        await window.aistudio.openSelectKey();
+        setIsApiKeySelected(true);
+      } catch (e) {
+        console.error("Erro ao abrir seletor de chave:", e);
+      }
+    }
+  };
+
   useEffect(() => {
     Promise.all([
       localforage.getItem<Inspection[]>('qdez_rascunhos'),
@@ -320,6 +350,41 @@ const App: React.FC = () => {
     }
   };
 
+  if (isApiKeySelected === false) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full bg-white p-12 rounded-[3.5rem] shadow-2xl border border-red-50">
+          <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
+            <svg className="w-10 h-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-4">Configuração Necessária</h2>
+          <p className="text-slate-500 text-sm mb-8 leading-relaxed">
+            Para utilizar as funções de análise técnica e perícia com IA, é necessário selecionar uma chave de API do Google Gemini.
+          </p>
+          <button 
+            onClick={handleOpenKeySelector}
+            className="w-full bg-red-600 text-white py-5 rounded-[2rem] font-black uppercase text-xs shadow-xl hover:bg-red-700 transition-all active:scale-95"
+          >
+            Selecionar Chave de API
+          </button>
+          <p className="mt-6 text-[10px] text-slate-400 uppercase tracking-widest">
+            A chave é necessária para processar fotos e vídeos.
+          </p>
+          <a 
+            href="https://ai.google.dev/gemini-api/docs/billing" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="block mt-4 text-[9px] font-bold text-red-600 hover:underline uppercase"
+          >
+            Saiba mais sobre faturamento e cotas
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {toastMessage && (
@@ -333,11 +398,75 @@ const App: React.FC = () => {
             <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-black">Q</div>
             <h1 className="font-black uppercase text-sm tracking-tighter">Qdez Vistoria AI</h1>
           </div>
-          <button onClick={() => setView('type_selector')} className="bg-red-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-red-700 transition-all shadow-lg active:scale-95">+ Nova Vistoria</button>
+          <div className="flex items-center gap-4">
+            <button onClick={() => setView('settings')} className="text-slate-400 hover:text-white transition-colors p-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+            <button onClick={() => setView('type_selector')} className="bg-red-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-red-700 transition-all shadow-lg active:scale-95">+ Nova Vistoria</button>
+          </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-4 w-full flex-1">
+        {view === 'settings' && (
+          <div className="max-w-md mx-auto pt-10 animate-in fade-in duration-500">
+            <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100">
+              <div className="flex justify-between items-center mb-10">
+                <h2 className="text-2xl font-black uppercase tracking-tighter">Configurações</h2>
+                <button onClick={() => setView('list')} className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-600 transition-colors">Voltar</button>
+              </div>
+              
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 px-2">Chave de API Gemini</label>
+                  <button 
+                    onClick={handleOpenKeySelector}
+                    className="w-full flex items-center justify-between bg-slate-50 p-6 rounded-2xl border border-slate-100 hover:border-red-500 transition-all group"
+                  >
+                    <span className="text-[10px] font-black uppercase text-slate-700">Alterar Chave de API</span>
+                    <svg className="w-4 h-4 text-slate-300 group-hover:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 px-2">Nível de Detalhe</label>
+                  <div className="flex gap-2">
+                    {(['Conciso', 'Normal', 'Muito Detalhado'] as const).map(level => (
+                      <button 
+                        key={level}
+                        onClick={() => setSettings(s => ({ ...s, detailLevel: level }))}
+                        className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${settings.detailLevel === level ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 px-2">Tom do Laudo</label>
+                  <div className="flex gap-2">
+                    {(['Técnico', 'Amigável', 'Direto'] as const).map(tone => (
+                      <button 
+                        key={tone}
+                        onClick={() => setSettings(s => ({ ...s, tone: tone }))}
+                        className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase transition-all ${settings.tone === tone ? 'bg-slate-900 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
+                      >
+                        {tone}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {view === 'list' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">Histórico David Oliveira</h2>

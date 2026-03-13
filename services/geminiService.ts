@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { AppSettings } from "../types";
 
 const stripDataUrl = (value: string) => {
@@ -57,30 +57,38 @@ Modifique a imagem conforme o comando do usuário para fins documentais.
 Mantenha o realismo e a coerência visual.`;
   }
 
-  return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador Imobiliário Sênior e Auditor de Qualidade.
-Sua tarefa é gerar um laudo de vistoria de nível "World Class", equivalente aos melhores softwares do mercado (VistoHouse, MSYS).
+  return `Você é David Oliveira (Creci 84926-F), Perito Vistoriador Imobiliário Sênior.
+Sua missão é gerar laudos técnicos de ALTA PRECISÃO, CONCISOS e OBJETIVOS.
+
+ESTILO DE ESCRITA:
+- Use frases curtas e diretas. Evite adjetivos subjetivos (ex: "lindo", "agradável").
+- Foco absoluto no ESTADO DE CONSERVAÇÃO e FUNCIONALIDADE.
+- Use terminologia técnica padronizada (ex: "Pintura látex com sujidades", "Piso cerâmico com fissura", "Esquadria com vedação íntegra").
 
 DIRETRIZES DE ELITE:
-- TERMINOLOGIA: Use termos técnicos rigorosos (ex: "Eflorescência", "Desplacamento", "Oxidação", "Fissura capilar").
-- MATERIAIS: Identifique marcas e modelos se visíveis (ex: "Metais Deca", "Louças Incepa", "Ar-condicionado Split Samsung").
+- DETALHAMENTO MÁXIMO DO ESTADO: Para cada item encontrado, descreva minuciosamente seu estado físico (ex: riscos, manchas, furos, oxidação, integridade de pintura, funcionamento de dobradiças/trincos).
+- OBJETIVIDADE: Vá direto ao ponto. "Paredes: Pintura branca, estado regular, presença de furos de bucha e marcas de atrito."
+- MATERIAIS E MARCAS: Identifique marcas de metais (Deca, Docol), louças e eletros visíveis.
 - QUANTITATIVO: Conte elementos (ex: "04 tomadas 2P+T", "02 pontos de iluminação").
-- FUNCIONALIDADE: Infira o funcionamento com base no estado visual (ex: "Esquadria com vedação íntegra", "Sifão sem sinais de vazamento").
+- PATOLOGIAS: Destaque infiltrações, umidade, fissuras estruturais ou sinais de pragas de forma técnica.
 - PONTUAÇÃO: Atribua uma nota de 0 a 10 para o estado geral do ambiente.
-- SEGURANÇA: Destaque itens que afetam a segurança ou habitabilidade imediata.
 - ${detailInstruction}`;
 };
 
 const getAIInstance = () => {
   // Tenta obter de várias fontes possíveis em ambiente Vite/Node
+  // Prioriza process.env.API_KEY que é onde a plataforma injeta a chave selecionada
   const rawApiKey = 
-    (typeof process !== 'undefined' && process.env ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : null) || 
-    ((import.meta as any).env ? ((import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.VITE_API_KEY) : null) ||
+    (typeof process !== 'undefined' && process.env ? (process.env.API_KEY || process.env.GEMINI_API_KEY) : null) || 
+    ((import.meta as any).env ? ((import.meta as any).env.VITE_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY) : null) ||
+    (window as any).process?.env?.API_KEY ||
+    (window as any).process?.env?.GEMINI_API_KEY ||
     "";
 
   const apiKey = typeof rawApiKey === 'string' ? rawApiKey.replace(/['"]/g, '').trim() : '';
   
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey === '' || apiKey.length < 10) {
-    throw new Error("A chave de API do Gemini não foi encontrada ou é inválida. Verifique as configurações do ambiente (GEMINI_API_KEY).");
+    throw new Error("A chave de API do Gemini não foi encontrada ou é inválida. Por favor, clique em 'Configurar Chave' ou verifique as configurações.");
   }
   
   return new GoogleGenAI({ apiKey });
@@ -143,7 +151,7 @@ export const analyzeRoomMediaAI = async (
   settings: AppSettings
 ): Promise<any> => {
   const ai = getAIInstance();
-  const modelName = 'gemini-3-flash-preview';
+  const modelName = 'gemini-3.1-pro-preview';
 
   if (!mediaItems || mediaItems.length === 0) {
     throw new Error('Nenhuma mídia foi enviada para análise.');
@@ -177,15 +185,15 @@ export const analyzeRoomMediaAI = async (
   };
 
   // limita a carga para evitar estouro e travamento
-  let limitedMedia = mediaItems.slice(0, 5);
+  let limitedMedia = mediaItems.slice(0, 10);
   
   // Limita o tamanho total para evitar erro 502/413 no proxy
   let totalSizeMB = 0;
   const safeMedia = [];
   for (const item of limitedMedia) {
     const size = estimateBase64SizeMB(item.data);
-    if (totalSizeMB + size > 8) { // Limite de ~8MB total
-      console.warn(`Mídia ignorada para não exceder o limite de 8MB (Total atual: ${totalSizeMB.toFixed(2)}MB)`);
+    if (totalSizeMB + size > 15) { // Limite de ~15MB total para Pro
+      console.warn(`Mídia ignorada para não exceder o limite de 15MB (Total atual: ${totalSizeMB.toFixed(2)}MB)`);
       break;
     }
     totalSizeMB += size;
@@ -193,7 +201,7 @@ export const analyzeRoomMediaAI = async (
   }
 
   if (safeMedia.length === 0 && limitedMedia.length > 0) {
-    throw new Error('O primeiro arquivo de mídia excede o limite de 8MB. Por favor, envie um arquivo menor.');
+    throw new Error('O primeiro arquivo de mídia excede o limite de 15MB. Por favor, envie um arquivo menor.');
   }
 
   const parts: any[] = [
@@ -206,16 +214,17 @@ export const analyzeRoomMediaAI = async (
     {
       text: `
 Analise minuciosamente as mídias do ambiente "${roomType}" para um laudo de "${inspectionType}".
-Sua análise deve superar o padrão de mercado (VistoHouse, MSYS, BeSoft).
+Sua análise deve ser técnica, concisa e focada no estado de conservação.
 
 REQUISITOS DO LAUDO:
-1. DESCRITIVO TÉCNICO: Detalhe acabamentos (piso, parede, teto, rodapés).
-2. INVENTÁRIO QUANTITATIVO: Conte tomadas, interruptores, lâmpadas e acessórios.
-3. ESTADO DE CONSERVAÇÃO: Avalie cada item com rigor pericial.
-4. DIAGNÓSTICO DE AVARIAS: Identifique danos, categorize (Estético/Funcional/Estrutural), aponte a causa provável e sugira o reparo.
-5. MARCAS E MODELOS: Identifique marcas de metais, louças e eletros visíveis.
-6. PONTUAÇÃO: Dê uma nota de 0 a 10 para o ambiente.
+1. DESCRITIVO TÉCNICO OBJETIVO: Liste os materiais de acabamento de forma direta.
+2. ESTADO DE CONSERVAÇÃO DETALHADO: Para cada item (piso, paredes, teto, portas, janelas, elétrica, hidráulica), detalhe o máximo possível o estado físico encontrado (riscos, manchas, furos, integridade).
+3. INVENTÁRIO QUANTITATIVO: Liste e conte componentes (tomadas, interruptores, acessórios).
+4. DIAGNÓSTICO DE AVARIAS: Identifique danos, categorize (Estético/Funcional/Estrutural) e sugira o reparo técnico.
+5. PONTUAÇÃO: Nota de 0 a 10 para o ambiente.
 
+Seja extremamente objetivo. Evite textos introdutórios ou conclusivos. Foque nos fatos visíveis.
+Pense passo a passo sobre cada detalhe visível nas fotos e vídeos antes de gerar o JSON final.
 Retorne APENAS o JSON conforme o esquema solicitado.
       `.trim(),
     },
@@ -228,6 +237,7 @@ Retorne APENAS o JSON conforme o esquema solicitado.
       config: {
         systemInstruction: getSystemInstruction(settings, 'analysis'),
         responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
