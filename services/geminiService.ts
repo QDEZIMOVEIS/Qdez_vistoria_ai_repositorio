@@ -71,11 +71,16 @@ DIRETRIZES DE ELITE:
 };
 
 const getAIInstance = () => {
-  const rawApiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || "";
+  // Tenta obter de várias fontes possíveis em ambiente Vite/Node
+  const rawApiKey = 
+    (typeof process !== 'undefined' && process.env ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : null) || 
+    ((import.meta as any).env ? ((import.meta as any).env.VITE_GEMINI_API_KEY || (import.meta as any).env.VITE_API_KEY) : null) ||
+    "";
+
   const apiKey = typeof rawApiKey === 'string' ? rawApiKey.replace(/['"]/g, '').trim() : '';
   
-  if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey === '') {
-    throw new Error("A chave de API do Gemini não foi encontrada. Verifique as configurações do ambiente.");
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey === '' || apiKey.length < 10) {
+    throw new Error("A chave de API do Gemini não foi encontrada ou é inválida. Verifique as configurações do ambiente (GEMINI_API_KEY).");
   }
   
   return new GoogleGenAI({ apiKey });
@@ -138,7 +143,7 @@ export const analyzeRoomMediaAI = async (
   settings: AppSettings
 ): Promise<any> => {
   const ai = getAIInstance();
-  const modelName = 'gemini-3.1-pro-preview';
+  const modelName = 'gemini-3-flash-preview';
 
   if (!mediaItems || mediaItems.length === 0) {
     throw new Error('Nenhuma mídia foi enviada para análise.');
