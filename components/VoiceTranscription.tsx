@@ -70,9 +70,9 @@ const VoiceTranscription: React.FC<VoiceTranscriptionProps> = ({ onTranscription
       if (text) {
         onTranscriptionComplete(text, selectedMode);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro na transcrição:", err);
-      alert("Não foi possível processar o áudio.");
+      alert(err.message || "Não foi possível processar o áudio.");
     } finally {
       setIsProcessing(false);
     }

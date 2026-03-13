@@ -75,11 +75,19 @@ export const editImageAI = async (
   prompt: string,
   settings: AppSettings
 ): Promise<string> => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Chave de API do Gemini não encontrada.");
+  const rawApiKey = process.env.GEMINI_API_KEY;
+  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
+    throw new Error(`Chave de API do Gemini inválida ou não encontrada na edição. Valor atual: "${rawApiKey}"`);
   }
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ 
+    apiKey,
+    httpOptions: {
+      headers: {
+        'x-goog-api-key': apiKey
+      }
+    }
+  });
   const modelName = "gemini-2.5-flash-image";
   const base64Data = stripDataUrl(imageData);
 
@@ -131,11 +139,19 @@ export const analyzeRoomMediaAI = async (
   mediaItems: { data: string; mimeType: string }[],
   settings: AppSettings
 ): Promise<any> => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Chave de API do Gemini não encontrada.");
+  const rawApiKey = process.env.GEMINI_API_KEY;
+  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
+    throw new Error(`Chave de API do Gemini inválida ou não encontrada na análise. Valor atual: "${rawApiKey}"`);
   }
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ 
+    apiKey,
+    httpOptions: {
+      headers: {
+        'x-goog-api-key': apiKey
+      }
+    }
+  });
   const modelName = 'gemini-3.1-pro-preview';
 
   if (!mediaItems || mediaItems.length === 0) {
@@ -328,11 +344,19 @@ export const performComparisonAI = async (
   settings: AppSettings,
   manualObs?: string
 ): Promise<any> => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Chave de API do Gemini não encontrada.");
+  const rawApiKey = process.env.GEMINI_API_KEY;
+  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
+    throw new Error(`Chave de API do Gemini inválida ou não encontrada na comparação. Valor atual: "${rawApiKey}"`);
   }
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ 
+    apiKey,
+    httpOptions: {
+      headers: {
+        'x-goog-api-key': apiKey
+      }
+    }
+  });
   const modelName = "gemini-3-flash-preview";
 
   const entrySize = estimateBase64SizeMB(entryPdf);
@@ -398,8 +422,13 @@ Escreva em markdown técnico, com linguagem formal e objetiva.`;
         "Os PDFs enviados excedem o limite aceito para comparação. Gere versões mais leves e tente novamente."
       );
     }
+    
+    if (message.includes('API_KEY')) {
+      throw new Error('A chave da IA não está configurada corretamente.');
+    }
 
-    throw new Error("Erro na comparação pericial. Verifique os PDFs e tente novamente.");
+    const errorDetail = message || (error instanceof Error ? error.stack : JSON.stringify(error));
+    throw new Error(`Erro na comparação pericial. Detalhe técnico: ${errorDetail}`);
   }
 };
 
@@ -408,9 +437,17 @@ export const transcribeAudio = async (
   settings: AppSettings,
   mimeType: string = "audio/webm"
 ): Promise<string> => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return "";
-  const ai = new GoogleGenAI({ apiKey });
+  const rawApiKey = process.env.GEMINI_API_KEY;
+  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') return "";
+  const ai = new GoogleGenAI({ 
+    apiKey,
+    httpOptions: {
+      headers: {
+        'x-goog-api-key': apiKey
+      }
+    }
+  });
 
   try {
     const response = await ai.models.generateContent({
@@ -433,8 +470,13 @@ Tom: ${settings.tone}.`,
     });
 
     return response.text || "";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro na transcrição de áudio:", error);
-    return "";
+    const message = String(error?.message || "");
+    if (message.includes('API_KEY')) {
+      throw new Error('A chave da IA não está configurada corretamente.');
+    }
+    const errorDetail = message || (error instanceof Error ? error.stack : JSON.stringify(error));
+    throw new Error(`Erro na transcrição. Detalhe técnico: ${errorDetail}`);
   }
 };
