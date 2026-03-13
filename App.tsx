@@ -344,7 +344,8 @@ const App: React.FC = () => {
             <div className="grid gap-4">
               {inspections.length === 0 ? (
                 <div className="p-16 border-2 border-dashed border-slate-200 rounded-[3rem] text-center bg-white/50">
-                  <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Sem registros.</p>
+                  <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mb-4">Inicie um novo laudo profissional</p>
+                  <button onClick={() => setView('type_selector')} className="text-red-600 font-black text-xs uppercase hover:underline">Criar Vistoria</button>
                 </div>
               ) : (
                 inspections.map(ins => (
@@ -381,27 +382,29 @@ const App: React.FC = () => {
         {view === 'type_selector' && (
           <div className="max-w-md mx-auto pt-20 animate-in zoom-in-95 duration-300">
             <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 text-center">
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-8">Novo Relatório</h2>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter mb-2">Novo Laudo</h2>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Selecione o modelo de vistoria</p>
+              
               <div className="grid gap-3">
-                <button onClick={() => confirmNewInspection('Entrada')} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                  <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Vistoria de Entrada</span>
+                <button onClick={() => confirmNewInspection('Entrada')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Vistoria de Entrada</span>
+                  <span className="text-[9px] font-medium text-slate-400 uppercase">Laudo inicial de entrega de imóvel</span>
                 </button>
-                <button onClick={() => confirmNewInspection('Saída')} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                  <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Vistoria de Saída</span>
+                <button onClick={() => confirmNewInspection('Saída')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Vistoria de Saída</span>
+                  <span className="text-[9px] font-medium text-slate-400 uppercase">Verificação para encerramento de contrato</span>
                 </button>
-                <div className="space-y-2">
-                  <button onClick={() => confirmNewInspection('Constatação', 'Padrão')} className="w-full p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                    <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Constatação Padrão</span>
-                  </button>
-                  <button onClick={() => confirmNewInspection('Constatação', 'Reparos')} className="w-full p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                    <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Constatação de Reparos</span>
-                  </button>
-                </div>
-                <button onClick={() => confirmNewInspection('Comparação')} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
-                  <span className="block font-black text-slate-800 uppercase text-xs group-hover:text-red-700">Comparativo IA</span>
+                <button onClick={() => confirmNewInspection('Constatação', 'Padrão')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Vistoria de Constatação</span>
+                  <span className="text-[9px] font-medium text-slate-400 uppercase">Registro fiel da situação atual</span>
+                </button>
+                <button onClick={() => confirmNewInspection('Comparação')} className="p-5 rounded-2xl border-2 border-slate-100 hover:border-red-500 hover:bg-red-50 transition-all text-left group">
+                  <span className="block font-black text-slate-800 group-hover:text-red-600 uppercase text-xs">Comparativo IA</span>
+                  <span className="text-[9px] font-medium text-slate-400 uppercase">Análise pericial entre dois laudos</span>
                 </button>
               </div>
-              <button onClick={() => setView('list')} className="mt-8 text-[10px] font-black text-slate-300 uppercase tracking-widest">Voltar</button>
+              
+              <button onClick={() => setView('list')} className="mt-8 text-[10px] font-black text-slate-300 uppercase hover:text-slate-500 tracking-widest">Voltar</button>
             </div>
           </div>
         )}
