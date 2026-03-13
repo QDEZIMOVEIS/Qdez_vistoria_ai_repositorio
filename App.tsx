@@ -33,6 +33,12 @@ const App: React.FC = () => {
   const [processingRoomId, setProcessingRoomId] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [errorRoomId, setErrorRoomId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   // Estados para edição de imagem via IA
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
@@ -100,7 +106,7 @@ const App: React.FC = () => {
     const updated = { ...ins, isSynced: true };
     saveToGlobalList(updated);
     setIsBusy(false);
-    alert("Vistoria sincronizada com Storage Qdez!");
+    showToast("Vistoria sincronizada com Storage Qdez!");
   };
 
   const updateCurrent = (updates: Partial<Inspection>) => {
@@ -162,7 +168,7 @@ const App: React.FC = () => {
     const videos = overrideVideos || room.videos;
 
     if (photos.length === 0 && videos.length === 0) {
-      alert("Por favor, adicione fotos ou vídeos para análise.");
+      showToast("Por favor, adicione fotos ou vídeos para análise.");
       return;
     }
 
@@ -238,7 +244,7 @@ const App: React.FC = () => {
       setEditingPhotoId(null);
       setIaPrompt('');
     } catch (err) {
-      alert("Não foi possível editar a imagem. O modelo pode ter tido dificuldades com o prompt.");
+      showToast("Não foi possível editar a imagem. O modelo pode ter tido dificuldades com o prompt.");
     } finally {
       setIsEditingIA(false);
     }
@@ -269,7 +275,7 @@ const App: React.FC = () => {
     if (!pdfEntry || !pdfExit || !current) return;
     const totalSizeMB = (pdfEntry.size + pdfExit.size) / (1024 * 1024);
     if (totalSizeMB > MAX_PAYLOAD_MB) {
-      alert(`Arquivos muito grandes para processamento direto.`);
+      showToast(`Arquivos muito grandes para processamento direto.`);
       return;
     }
     setIsBusy(true);
@@ -284,7 +290,7 @@ const App: React.FC = () => {
       saveToGlobalList(updated);
       setView('report');
     } catch (e: any) {
-      alert("Erro na perícia.");
+      showToast(e.message || "Erro na perícia.");
     } finally { setIsBusy(false); }
   };
 
@@ -316,6 +322,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
+      {toastMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl text-xs font-bold uppercase tracking-widest animate-in fade-in slide-in-from-top-4">
+          {toastMessage}
+        </div>
+      )}
       <header className="bg-slate-900 text-white p-4 sticky top-0 z-50 shadow-lg no-print">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('list')}>

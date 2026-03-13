@@ -45,19 +45,24 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideosAdded, videos = [
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const MAX_VIDEO_SIZE = 15 * 1024 * 1024; // 15MB
-    const oversized = Array.from(files as FileList).some((f: File) => f.size > MAX_VIDEO_SIZE);
+    const MAX_VIDEO_SIZE = 8 * 1024 * 1024; // 8MB
+    const validFiles = Array.from(files as FileList).filter((f: File) => f.size <= MAX_VIDEO_SIZE);
+    const oversizedCount = files.length - validFiles.length;
     
-    if (oversized) {
-      // Apenas logar ou mostrar aviso visual, mas não bloquear com confirm() em iframe
-      console.warn("Alguns vídeos são grandes (>15MB) e podem causar lentidão.");
+    if (oversizedCount > 0) {
+      console.warn(`${oversizedCount} vídeo(s) ignorado(s) por excederem o limite de 8MB.`);
+    }
+
+    if (validFiles.length === 0) {
+      e.target.value = '';
+      return;
     }
 
     setIsUploading(true);
     setProgress(0);
     const newVideos: VideoType[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const v = await processVideo(files[i]);
+    for (let i = 0; i < validFiles.length; i++) {
+      const v = await processVideo(validFiles[i]);
       newVideos.push(v);
     }
     onVideosAdded(newVideos);
@@ -103,7 +108,7 @@ const VideoUploader: React.FC<VideoUploaderProps> = ({ onVideosAdded, videos = [
                 </svg>
               </div>
               <p className="text-[10px] text-red-600 font-black uppercase tracking-widest">Adicionar Vídeos</p>
-              <p className="text-[8px] text-slate-400 mt-1 font-bold uppercase">(Galeria: mp4, webm, mov)</p>
+              <p className="text-[8px] text-slate-400 mt-1 font-bold uppercase">(Galeria: mp4, webm, mov - Máx 8MB)</p>
             </div>
           )}
           <input 

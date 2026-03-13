@@ -76,7 +76,7 @@ export const editImageAI = async (
   settings: AppSettings
 ): Promise<string> => {
   const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
     throw new Error(`Chave de API do Gemini inválida ou não encontrada na edição. Valor atual: "${rawApiKey}"`);
   }
@@ -134,7 +134,7 @@ export const analyzeRoomMediaAI = async (
   settings: AppSettings
 ): Promise<any> => {
   const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
     throw new Error(`Chave de API do Gemini inválida ou não encontrada na análise. Valor atual: "${rawApiKey}"`);
   }
@@ -175,10 +175,27 @@ export const analyzeRoomMediaAI = async (
   };
 
   // limita a carga para evitar estouro e travamento
-  const limitedMedia = mediaItems.slice(0, 5);
+  let limitedMedia = mediaItems.slice(0, 5);
+  
+  // Limita o tamanho total para evitar erro 502/413 no proxy
+  let totalSizeMB = 0;
+  const safeMedia = [];
+  for (const item of limitedMedia) {
+    const size = estimateBase64SizeMB(item.data);
+    if (totalSizeMB + size > 8) { // Limite de ~8MB total
+      console.warn(`Mídia ignorada para não exceder o limite de 8MB (Total atual: ${totalSizeMB.toFixed(2)}MB)`);
+      break;
+    }
+    totalSizeMB += size;
+    safeMedia.push(item);
+  }
+
+  if (safeMedia.length === 0 && limitedMedia.length > 0) {
+    throw new Error('O primeiro arquivo de mídia excede o limite de 8MB. Por favor, envie um arquivo menor.');
+  }
 
   const parts: any[] = [
-    ...limitedMedia.map((item) => ({
+    ...safeMedia.map((item) => ({
       inlineData: {
         data: normalizeBase64(item.data),
         mimeType: item.mimeType,
@@ -301,8 +318,8 @@ Retorne APENAS o JSON conforme o esquema solicitado.
       throw new Error('O limite de uso da IA foi atingido no momento. Tente novamente.');
     }
 
-    if (message.includes('413') || message.includes('Too Large')) {
-      throw new Error('As mídias estão muito pesadas para análise. Reduza a quantidade ou tamanho.');
+    if (message.includes('413') || message.includes('Too Large') || message.includes('502') || message.includes('Bad Gateway')) {
+      throw new Error('As mídias estão muito pesadas para análise (Erro de conexão/tamanho). Reduza a quantidade ou o tamanho dos vídeos/fotos.');
     }
 
     if (message.includes('SAFETY')) {
@@ -334,7 +351,7 @@ export const performComparisonAI = async (
   manualObs?: string
 ): Promise<any> => {
   const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
     throw new Error(`Chave de API do Gemini inválida ou não encontrada na comparação. Valor atual: "${rawApiKey}"`);
   }
@@ -347,9 +364,9 @@ export const performComparisonAI = async (
   const exitSize = estimateBase64SizeMB(exitPdf);
   const totalSize = entrySize + exitSize;
 
-  if (entrySize > 10 || exitSize > 10 || totalSize > 18) {
+  if (entrySize > 6 || exitSize > 6 || totalSize > 8) {
     throw new Error(
-      "Os PDFs estão muito pesados para comparação direta. Reduza o tamanho dos arquivos ou gere versões mais leves."
+      "Os PDFs estão muito pesados para comparação direta (Limite 8MB). Reduza o tamanho dos arquivos ou gere versões mais leves."
     );
   }
 
@@ -422,7 +439,7 @@ export const transcribeAudio = async (
   mimeType: string = "audio/webm"
 ): Promise<string> => {
   const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.trim() : '';
+  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
   if (!apiKey || apiKey === 'undefined' || apiKey === 'null') return "";
   const ai = new GoogleGenAI({ 
     apiKey
