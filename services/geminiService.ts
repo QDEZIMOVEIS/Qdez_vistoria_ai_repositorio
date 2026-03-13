@@ -70,19 +70,23 @@ DIRETRIZES DE ELITE:
 - ${detailInstruction}`;
 };
 
+const getAIInstance = () => {
+  const rawApiKey = process.env.GEMINI_API_KEY || process.env.API_KEY || "";
+  const apiKey = typeof rawApiKey === 'string' ? rawApiKey.replace(/['"]/g, '').trim() : '';
+  
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey === '') {
+    throw new Error("A chave de API do Gemini não foi encontrada. Verifique as configurações do ambiente.");
+  }
+  
+  return new GoogleGenAI({ apiKey });
+};
+
 export const editImageAI = async (
   imageData: string,
   prompt: string,
   settings: AppSettings
 ): Promise<string> => {
-  const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
-  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
-    throw new Error(`Chave de API do Gemini inválida ou não encontrada na edição. Valor atual: "${rawApiKey}"`);
-  }
-  const ai = new GoogleGenAI({ 
-    apiKey
-  });
+  const ai = getAIInstance();
   const modelName = "gemini-2.5-flash-image";
   const base64Data = stripDataUrl(imageData);
 
@@ -133,14 +137,7 @@ export const analyzeRoomMediaAI = async (
   mediaItems: { data: string; mimeType: string }[],
   settings: AppSettings
 ): Promise<any> => {
-  const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
-  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
-    throw new Error(`Chave de API do Gemini inválida ou não encontrada na análise. Valor atual: "${rawApiKey}"`);
-  }
-  const ai = new GoogleGenAI({ 
-    apiKey
-  });
+  const ai = getAIInstance();
   const modelName = 'gemini-3.1-pro-preview';
 
   if (!mediaItems || mediaItems.length === 0) {
@@ -350,14 +347,7 @@ export const performComparisonAI = async (
   settings: AppSettings,
   manualObs?: string
 ): Promise<any> => {
-  const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
-  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
-    throw new Error(`Chave de API do Gemini inválida ou não encontrada na comparação. Valor atual: "${rawApiKey}"`);
-  }
-  const ai = new GoogleGenAI({ 
-    apiKey
-  });
+  const ai = getAIInstance();
   const modelName = "gemini-3-flash-preview";
 
   const entrySize = estimateBase64SizeMB(entryPdf);
@@ -438,14 +428,8 @@ export const transcribeAudio = async (
   settings: AppSettings,
   mimeType: string = "audio/webm"
 ): Promise<string> => {
-  const rawApiKey = process.env.GEMINI_API_KEY;
-  const apiKey = rawApiKey ? rawApiKey.replace(/['"]/g, '').trim() : '';
-  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') return "";
-  const ai = new GoogleGenAI({ 
-    apiKey
-  });
-
   try {
+    const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [{
